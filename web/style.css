@@ -255,9 +255,13 @@ details[open] > summary::after { transform:rotate(225deg) }
   #contenuto:has(.area-panel:not([hidden])) .map-tools { position:relative; inset:auto; grid-row:2; margin:0 var(--inset) calc(var(--inset) + 12px) 0 }
   .area-panel { position:relative; inset:auto; grid-row:1; align-self:start; margin:18px var(--inset) 0 0; max-height:calc(100% - 18px) }
 }
+@media (min-width:520px) and (max-width:640px) and (max-height:420px) {
+  .top { grid-template-columns:auto minmax(0,1fr) auto; padding-block:4px }
+  .search { grid-row:auto; grid-column:auto }
+}
 @media (min-width:520px) and (max-height:420px) {
   #contenuto:has(.area-panel:not([hidden])) {
-    --local-width:clamp(280px,49%,340px);
+    --local-width:clamp(300px,49%,340px);
     --map-bottom:calc(22px + env(safe-area-inset-bottom));
     grid-template:min-content minmax(0,1fr) auto / minmax(0,1fr);
   }
