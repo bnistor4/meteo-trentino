@@ -1,4 +1,4 @@
-import {addDays, dayIndex, peakDays, aggregate, areaStats, formatValue, shownMeanDifference} from "./indicators.mjs";
+import {addDays, dayIndex, stepDay, peakDays, aggregate, areaStats, formatValue, shownMeanDifference} from "./indicators.mjs";
 
 const $ = id => document.getElementById(id);
 $("map-date-slot").append($("date-template").content.cloneNode(true));
@@ -59,7 +59,7 @@ const dailyMetrics = ["min","max","rainDay"];
 const metricOrder = [...dailyMetrics,"mean","frost","spring","heat","rain","storm","storm48","storm72","gdd"];
 const province = {id:0,name:"Provincia di Trento"};
 const state = {mapMetric:"min",compareMetric:"min",mapBand:"all",compareBand:"all",
-  zone:0,comune:0,zoom:1,center:null,cell:null,station:null,dates:null,pairA:11,pairB:4,data:null,layers:new Map()};
+  zone:0,comune:0,zoom:1,center:null,cell:null,station:null,mapDay:null,dates:null,pairA:11,pairB:4,data:null,layers:new Map()};
 const frame = $("atlas-map");
 const fmt = v => formatValue.format(v);
 const pct = v => Math.round(v * 100) + "%";
@@ -77,7 +77,7 @@ function boundsFor(key) {
   if (key === "gdd") return [d.seasonStart,d.seasonEnd];
   if (key === "spring") return [d.springStart,d.springEnd];
   if (dailyMetrics.includes(key)) {
-    const end=state.dates?.[1] ?? d.latest;
+    const end=state.mapDay ?? state.dates?.[1] ?? d.latest;
     return [end,end];
   }
   if (state.dates) return state.dates;
@@ -99,6 +99,7 @@ function mapHash(view=activeView(), overrides={}) {
   if (s.center) p.set("centro",s.center.map(n=>n.toFixed(3)).join(","));
   if (s.cell!==null) p.set("punto",s.cell);
   if (s.station) p.set("stazione",s.station.id);
+  if (s.mapDay) p.set("giorno",s.mapDay);
   if (s.dates) { p.set("dal",s.dates[0]); p.set("al",s.dates[1]); }
   if (s.stations) p.set("stazioni","1");
   return "#"+view+"?"+p;
@@ -140,18 +141,21 @@ function restoreUrl() {
   const cell=p.get("punto");
   state.cell=cell && /^\d+$/.test(cell) && state.zoneArray[Number(cell)]>0 ? Number(cell) : null;
   state.station=d.stations.find(s=>String(s.id)===p.get("stazione")) ?? null;
-  const from=p.get("dal"), to=p.get("al");
+  const from=p.get("dal"), to=p.get("al"), mapDay=p.get("giorno");
   const iso=s=>/^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) && addDays(s,0)===s;
   const requested=iso(from) && iso(to) && from<=to;
   const dates=requested && from>=d.daily.start && to<=d.latest ? [from,to] : null;
+  const chosen=iso(mapDay) && mapDay>=d.daily.start && mapDay<=d.latest ? mapDay : null;
   state.dates=state.daily ? dates : null;
-  $("date-status").textContent=requested && !dates ? "Il periodo del link non è più disponibile. Mostro il periodo predefinito." : "";
+  state.mapDay=state.daily || chosen===d.latest ? chosen : null;
+  const expired=(requested && !dates) || (mapDay && !chosen);
+  $("date-status").textContent=expired ? "La data del link non è più disponibile. Mostro i dati disponibili." : "";
   state.stations=p.get("stazioni")==="1";
-  return dates;
+  return {dates,mapDay:chosen,expired};
 }
 function layerFor(key) {
   const d=state.data, [from,to]=boundsFor(key);
-  const precomputed=key==="gdd" || key==="spring" || !state.dates;
+  const precomputed=dailyMetrics.includes(key) ? to===d.latest : key==="gdd" || key==="spring" || !state.dates;
   const id=[key,from,to,precomputed].join("/");
   if (state.layers.has(id)) return state.layers.get(id);
   const field=key==="frost" || key==="min" ? "min" : key==="heat" || key==="max" ? "max" : key==="mean" ? "mean" : "rain";
@@ -237,7 +241,7 @@ function readPoint() {
   state.pin.removeAttribute("visibility");
   if (station) {
     box.replaceChildren(el("div",station.name+" · "+fmt(station.z)+" m","stat-tag"),
-      el("strong","Misure della stazione · "+day(state.data.latest)),
+      el("strong","Ultime misure della stazione · "+day(state.data.latest)),
       el("div",stationDescription(station)));
     return;
   }
@@ -484,14 +488,18 @@ function readDailySummary() {
   section.hidden=!rows;
   if (!rows) return;
   const zone=$("zone-read"), key=state.mapMetric;
-  const dailyFirst=dailyMetrics.includes(key) && boundsFor(key)[1]===state.data.latest &&
-    state.mapBand==="all" && state.cell===null && !state.station;
+  const isDaily=dailyMetrics.includes(key);
+  const selectedDate=isDaily ? boundsFor(key)[1] : state.data.latest;
+  const dailyFirst=isDaily && state.mapBand==="all" && state.cell===null && !state.station;
   if (dailyFirst && section.nextElementSibling!==zone) zone.before(section);
   else if (!dailyFirst && zone.nextElementSibling!==section) zone.after(section);
   $("save-comune").textContent=saved ? "Rimuovi dai salvati" : "Salva per le prossime visite";
   $("save-comune").setAttribute("aria-pressed",String(saved));
-  $("daily-heading").textContent="Ultimo giorno · "+shortDay(state.data.latest);
-  $("daily-values").replaceChildren(...rows.at(-1).map((reading,i)=>{
+  $("daily-heading").textContent=(selectedDate===state.data.latest ? "Ultimo giorno" : "Giorno sulla mappa")+" · "+shortDay(selectedDate);
+  const index=rows.length-1+dayIndex(selectedDate,state.data.latest);
+  const readings=rows[index] ?? dailyMetrics.map(metric=>state.data.layers[metric] ?
+    areaReading(state.comune,"all",metric,state.comuneArray).stats?.mean ?? null : null);
+  $("daily-values").replaceChildren(...readings.map((reading,i)=>{
     const item=el("div");
     item.append(el("span",dailyLabels[i],"stat-tag"),
       el("strong",reading===null ? "—" : value(reading,dailyMetrics[i])));
@@ -499,8 +507,10 @@ function readDailySummary() {
   }));
   const table=el("tbody");
   rows.forEach((row,index)=>{
-    const tr=el("tr"), date=el("th",shortDay(addDays(state.data.latest,index-rows.length+1)));
+    const iso=addDays(state.data.latest,index-rows.length+1);
+    const tr=el("tr"), date=el("th",shortDay(iso));
     date.scope="row";
+    if (isDaily && iso===selectedDate) date.setAttribute("aria-current","date");
     tr.append(date,...row.map((reading,i)=>el("td",reading===null ? "—" : value(reading,dailyMetrics[i]))));
     table.append(tr);
   });
@@ -530,6 +540,58 @@ function chooseArea(zone,comune,{recenter=true,focus=false}={}) {
   setAreaOpen(!!(zone||comune),focus);
 }
 let datesEdited=false;
+let loadingDay=false;
+function renderDayNav(key) {
+  const nav=$("day-nav");
+  nav.hidden=!dailyMetrics.includes(key);
+  if (nav.hidden) return;
+  const {latest,daily}=state.data, [,to]=boundsFor(key);
+  const stale=to===latest && observationsStale(latest);
+  $("day-select").value=to;
+  $("map-day").dateTime=to;
+  $("map-day").textContent=day(to);
+  $("day-status").textContent=loadingDay ? "Carico lo storico…" :
+    stale ? "Dati non recenti" : to===latest ? "Ultimo giorno con dati" : "Giorno osservato";
+  $("day-status").classList.toggle("stale",stale && !loadingDay);
+  $("day-prev").disabled=to<=daily.start;
+  $("day-next").disabled=to>=latest;
+  $("day-latest").disabled=to===latest;
+}
+function setDailyDay(date) {
+  state.mapDay=date===state.data.latest && !state.dates ? null : date;
+}
+async function navigateDay(target) {
+  if (!state.data || !dailyMetrics.includes(state.mapMetric)) return;
+  const data=state.data, current=boundsFor(state.mapMetric)[1], view=activeView();
+  if (!target || target===current || target<data.daily.start || target>data.latest) return;
+  if (loadingDay) { renderDayNav(state.mapMetric); return; }
+  if (target!==data.latest && !state.daily) {
+    loadingDay=true;
+    renderDayNav(state.mapMetric);
+    const unchanged=()=>state.data===data && activeView()===view &&
+      dailyMetrics.includes(state.mapMetric) && boundsFor(state.mapMetric)[1]===current;
+    try { await loadHistory(); }
+    catch {
+      loadingDay=false;
+      renderDayNav(state.mapMetric);
+      if (unchanged()) $("day-status").textContent="Storico non disponibile. Riprova.";
+      return;
+    }
+    loadingDay=false;
+    if (!unchanged()) { renderDayNav(state.mapMetric); return; }
+  }
+  setDailyDay(target);
+  applyDateView();
+}
+for (const [id,step] of [["day-prev",-1],["day-next",1],["day-latest",0]]) {
+  $(id).addEventListener("click",()=>{
+    const data=state.data;
+    if (!data) return;
+    const current=boundsFor(state.mapMetric)[1];
+    navigateDay(step===0 ? data.latest : stepDay(current,step,data.daily.start,data.latest));
+  });
+}
+$("day-select").addEventListener("change",event=>navigateDay(event.target.value));
 function renderDates() {
   const key=activeView()==="valli" ? state.compareMetric : state.mapMetric;
   const fixed=key==="gdd" || key==="spring";
@@ -546,7 +608,7 @@ function renderDates() {
   $("date-controls").querySelector(".fields").hidden=fixed;
   $("date-controls").querySelector('[type="submit"]').hidden=fixed || activeView()!=="valli";
   $("date-presets").hidden=fixed || daily;
-  $("date-reset").hidden=!state.dates || fixed;
+  $("date-reset").hidden=fixed || (daily ? to===state.data.latest : !state.dates);
   const span=peakDays[key];
   $("date-hint").textContent=fixed ? period(key)+" · periodo stagionale" :
     span && dayIndex(to,from)+1<span ? "Seleziona almeno "+span+" giorni per questo indicatore." :
@@ -561,7 +623,7 @@ function renderFilters() {
   const filters=[];
   if (state.mapBand!=="all") filters.push([bands[state.mapBand],()=>{state.mapBand="all";renderMap();}]);
   if (state.zone && !state.comune) filters.push([selectedArea().name,()=>chooseArea(0,0)]);
-  if (state.dates && !["gdd","spring"].includes(state.mapMetric)) {
+  if (state.dates && !dailyMetrics.includes(state.mapMetric) && !["gdd","spring"].includes(state.mapMetric)) {
     const [from,to]=boundsFor(state.mapMetric);
     filters.push([from===to ? shortDay(to) : shortDay(from)+" – "+shortDay(to),()=>{state.dates=null;applyDateView();}]);
   }
@@ -595,6 +657,7 @@ function renderMap() {
   const warning=periodWarning(key);
   $("period-warning").hidden=!warning;
   $("period-warning").textContent=warning;
+  renderDayNav(key);
   renderFilters();
   drawSelection(); renderRaster(); legend(); readZone(); readPoint(); renderDates(); toggleStations(); syncUrl();
 }
@@ -698,18 +761,24 @@ function loadHistory() {
 }
 async function openSharedRoute() {
   const current=location.hash;
-  const dates=restoreUrl();
-  if (dates && !state.daily) {
+  const {dates,mapDay,expired}=restoreUrl();
+  let unavailable=false;
+  if (!state.daily && (dates || (mapDay && mapDay!==state.data.latest))) {
     try {
       await loadHistory();
       if (location.hash!==current) return;
       state.dates=dates;
+      state.mapDay=mapDay;
     } catch {
       if (location.hash!==current) return;
+      unavailable=true;
       $("date-status").textContent="Serie del link non disponibile. Mostro il periodo predefinito.";
     }
   }
   showRoute();
+  if (unavailable || expired) {
+    if (!$("day-nav").hidden) $("day-status").textContent=unavailable ? "Storico non disponibile" : "Data del link non disponibile";
+  }
   setAreaOpen(!!(state.comune || state.zone || state.station || state.cell!==null) && state.closedArea!==areaKey());
 }
 async function populate(d) {
@@ -734,7 +803,7 @@ async function populate(d) {
     }
     for (const z of [...d.zones].sort((a,b)=>a.name.localeCompare(b.name,"it"))) option($(id),z.id,z.name);
   }
-  for (const id of ["date-start","date-end"]) {
+  for (const id of ["day-select","date-start","date-end"]) {
     $(id).replaceChildren();
     for (let date=d.latest;date>=d.daily.start;date=addDays(date,-1)) option($(id),date,day(date));
   }
@@ -774,6 +843,7 @@ async function load() {
     console.error(err);
     $("error").hidden=false;
     $("map-figure").hidden=true;
+    $("day-nav").hidden=true;
     $("period").textContent="Dati non disponibili";
     $("source-status").textContent="Dati non disponibili";
     $("source-status").closest(".fresh").classList.add("stale");
@@ -862,7 +932,7 @@ async function exportPng() {
 function shareUrl(view,key) {
   const url=new URL(location.href);
   const fixed=key==="gdd" || key==="spring" || (key==="heat" && !state.dates);
-  url.hash=mapHash(view,{dates:fixed ? state.dates : boundsFor(key)});
+  url.hash=mapHash(view,dailyMetrics.includes(key) ? {mapDay:boundsFor(key)[1]} : {dates:fixed ? state.dates : boundsFor(key)});
   return url.href;
 }
 function applyDateView() {
@@ -953,21 +1023,28 @@ async function submitDates(close=false) {
   const span=peakDays[key];
   if (span && dayIndex(b,a)+1<span) { $("date-status").textContent="Scegli almeno "+span+" giorni consecutivi."; return; }
   const before=location.hash;
-  if (!state.daily) {
+  if (!state.daily && (!dailyMetrics.includes(key) || b!==state.data.latest)) {
     $("date-status").textContent="Caricamento delle serie giornaliere…";
     try { await loadHistory(); }
     catch { $("date-status").textContent="Serie giornaliere non disponibili. Riprova."; return; }
     if (location.hash!==before || (!dailyMetrics.includes(key) && $("date-start").value!==a) || $("date-end").value!==b ||
         !(close ? $("filters") : $("valli")).open) return;
   }
-  state.dates=[a,b]; applyDateView();
+  if (dailyMetrics.includes(key)) setDailyDay(b);
+  else state.dates=[a,b];
+  applyDateView();
   if (close) closeSheet($("filters"));
 }
 $("date-controls").addEventListener("submit",event=>{
   event.preventDefault();
   submitDates($("filters").open);
 });
-$("date-reset").addEventListener("click",()=>{state.dates=null;applyDateView();});
+$("date-reset").addEventListener("click",()=>{
+  const key=activeView()==="valli" ? state.compareMetric : state.mapMetric;
+  if (dailyMetrics.includes(key)) setDailyDay(state.data.latest);
+  else state.dates=null;
+  applyDateView();
+});
 for (const id of ["date-start","date-end"]) $(id).addEventListener("change",()=>{datesEdited=true;});
 for (const button of $("date-presets").children) button.addEventListener("click",()=>{
   $("date-end").value=state.data.latest;
