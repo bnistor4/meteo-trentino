@@ -256,10 +256,25 @@ details[open] > summary::after { transform:rotate(225deg) }
   .area-panel { position:relative; inset:auto; grid-row:1; align-self:start; margin:18px var(--inset) 0 0; max-height:calc(100% - 18px) }
 }
 @media (min-width:520px) and (max-height:420px) {
-  #contenuto { --local-width:min(340px,49%) }
-  .area-panel { width:var(--local-width); margin-top:8px; max-height:calc(100% - 8px) }
-  #contenuto:has(.area-panel:not([hidden])) .map-tools { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; max-width:var(--local-width); margin-bottom:calc(22px + env(safe-area-inset-bottom)) }
-  #contenuto:has(.area-panel:not([hidden])) .map-key { visibility:visible; width:min(300px,calc(100% - var(--local-width) - 2 * var(--inset) - 8px)) }
+  #contenuto:has(.area-panel:not([hidden])) {
+    --local-width:clamp(280px,49%,340px);
+    --map-bottom:calc(22px + env(safe-area-inset-bottom));
+    grid-template:min-content minmax(0,1fr) auto / minmax(0,1fr);
+  }
+  #contenuto:has(.area-panel:not([hidden])) .toolbar { position:relative; inset:auto; grid-row:1; justify-self:start; margin:8px var(--inset) 0 }
+  .area-panel { grid-row:2; width:var(--local-width); margin-top:0; max-height:100% }
+  #contenuto:has(.area-panel:not([hidden])) .map-tools {
+    grid-row:3; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:4px;
+    max-width:var(--local-width); margin-bottom:var(--map-bottom);
+  }
+  #contenuto:has(.area-panel:not([hidden])) .map-tools > .control { padding-inline:6px }
+  #contenuto:has(.area-panel:not([hidden])) .map-controls button { width:44px }
+  #contenuto:has(.area-panel:not([hidden])) .map-key {
+    visibility:visible; position:relative; inset:auto; grid-row:2 / 4;
+    justify-self:start; align-self:end; margin:0 0 var(--map-bottom) var(--inset);
+    width:min(300px,calc(100% - var(--local-width) - 2 * var(--inset) - 8px));
+    max-height:calc(100% - var(--map-bottom)); overflow:auto;
+  }
 }
 @media print {
   body { height:auto; overflow:visible; display:block; print-color-adjust:exact; -webkit-print-color-adjust:exact }
