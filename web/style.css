@@ -170,6 +170,8 @@ thead th { background:var(--soft); white-space:nowrap }
 @media(max-height:480px) {
   .area-panel { max-height:54%; }
   .map-key { padding-block:4px }
+}
+@media(max-height:480px), (max-width:640px) and (max-height:700px) {
   .map-controls { display:flex }
   .map-controls button { border-radius:0 !important }
   .map-controls button + button { border-top:0; border-left:1px solid var(--line) }
@@ -240,9 +242,15 @@ details[open] > summary::after { transform:rotate(225deg) }
   .sheet.dock,.sheet#metric-picker { max-height:72dvh }
   #valli > .sheet-content > .fields { grid-template-columns:minmax(0,1fr) }
 }
+@media(max-width:640px) and (max-height:700px) {
+  .area-panel { max-height:46% }
+  #contenuto:has(.area-panel:not([hidden])) .map-tools { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; max-width:calc(100% - 2 * var(--inset)) }
+  #contenuto:has(.area-panel:not([hidden])) .map-tools > .control { padding-inline:8px }
+}
 @media (min-width:520px) and (max-height:420px) {
   .area-panel { width:min(340px,49%); max-height:calc(100% - 76px); top:8px; bottom:auto }
-  #contenuto:has(.area-panel:not([hidden])) .map-tools { bottom:calc(22px + env(safe-area-inset-bottom)) }
+  #contenuto:has(.area-panel:not([hidden])) .map-tools { right:calc(min(340px,49%) + var(--inset) + 8px); bottom:calc(22px + env(safe-area-inset-bottom)) }
+  #contenuto:has(.area-panel:not([hidden])) .map-key { visibility:hidden }
 }
 @media print {
   body { height:auto; overflow:visible; display:block; print-color-adjust:exact; -webkit-print-color-adjust:exact }
