@@ -218,6 +218,7 @@ function inspectPoint(point,station=null,focus=false) {
   const i=x>=0 && y>=0 && x<w && y<h ? y*w+x : -1;
   const zone=state.zoneArray[i];
   if (!station && !(zone>0)) return;
+  state.center=state.camera;
   if (zone>0 || station.comune) {
     state.zone=zone>0 ? zone : 0;
     state.comune=station?.comune || state.comuneArray[i] || 0;
