@@ -529,7 +529,10 @@ async function load() {
 function comuneMatches() {
   const query=normalize($("comune-search").value.trim());
   if (!query || !state.data) return [];
-  return state.data.comuni.filter(area=>normalize(area.name).includes(query)).slice(0,8);
+  const matches=state.data.comuni.map(area=>[area,normalize(area.name)])
+    .filter(([,name])=>name.includes(query));
+  const rank=name=>name===query ? 0 : name.startsWith(query) ? 1 : 2;
+  return matches.sort((a,b)=>rank(a[1])-rank(b[1])).slice(0,8).map(([area])=>area);
 }
 function openComune(area) {
   const {w,h}=state.data.grid;
