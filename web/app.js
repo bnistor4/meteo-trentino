@@ -1,4 +1,4 @@
-import {addDays, dayIndex, stepDay, peakDays, aggregate, areaStats, formatValue, shownMeanDifference} from "./indicators.mjs";
+import {addDays, dayIndex, stepDay, playbackStart, peakDays, aggregate, areaStats, formatValue, shownMeanDifference} from "./indicators.mjs";
 
 const $ = id => document.getElementById(id);
 $("map-date-slot").append($("date-template").content.cloneNode(true));
@@ -546,18 +546,35 @@ function chooseArea(zone,comune,{recenter=true,focus=false}={}) {
 }
 let datesEdited=false;
 let loadingDay=false;
+let playback=null;
+function stopPlayback(refresh=true) {
+  if (!playback) return;
+  clearTimeout(playback.timer);
+  playback=null;
+  if (refresh) renderDayNav(state.mapMetric);
+}
 function renderDayNav(key) {
   const nav=$("day-nav");
-  nav.hidden=!dailyMetrics.includes(key);
+  nav.hidden=activeView()!=="mappa" || !dailyMetrics.includes(key);
   if (nav.hidden) return;
   const {latest,daily}=state.data, [,to]=boundsFor(key);
   const stale=to===latest && observationsStale(latest);
+  const busy=loadingDay || playback?.loading;
+  const playing=!!playback && !busy;
+  const action=playback ? "Pausa" : "Riproduci";
+  $("day-announcement").setAttribute("aria-live",playing ? "off" : "polite");
+  $("day-play").setAttribute("aria-label",playback ? "Metti in pausa" : "Riproduci i giorni");
+  $("day-play").title=playback ? "Metti in pausa" : to===latest ? "Riproduci gli ultimi sette giorni" : "Riproduci da questa data";
+  $("day-play-icon").setAttribute("d",playback ? "M9 5v14m6-14v14" : "m8 5 11 7-11 7z");
+  $("day-play-text").textContent=action;
+  $("day-play").disabled=loadingDay || daily.start>=latest;
   $("day-select").value=to;
   $("map-day").dateTime=to;
   $("map-day").textContent=day(to);
-  $("day-status").textContent=loadingDay ? "Carico lo storico…" :
+  $("day-status").textContent=busy ? "Carico lo storico…" :
+    playing ? "Giorno "+(1+dayIndex(to,playback.start))+" di "+(1+dayIndex(latest,playback.start)) :
     stale ? "Dati non recenti" : to===latest ? "Ultimo giorno con dati" : "Giorno osservato";
-  $("day-status").classList.toggle("stale",stale && !loadingDay);
+  $("day-status").classList.toggle("stale",stale && !busy && !playing);
   $("day-prev").disabled=to<=daily.start;
   $("day-next").disabled=to>=latest;
   $("day-latest").disabled=to===latest;
@@ -565,8 +582,37 @@ function renderDayNav(key) {
 function setDailyDay(date) {
   state.mapDay=date===state.data.latest ? null : date;
 }
+async function playDays() {
+  if (playback) { stopPlayback(); return; }
+  if (!state.data || loadingDay || $("day-nav").hidden) return;
+  const {latest,daily}=state.data;
+  const start=playbackStart(boundsFor(state.mapMetric)[1],daily.start,latest);
+  if (start>=latest) return;
+  const run=playback={start,loading:!state.daily,timer:null};
+  if (run.loading) {
+    renderDayNav(state.mapMetric);
+    try { await loadHistory(); }
+    catch {
+      if (playback===run) {
+        stopPlayback();
+        $("day-status").textContent="Storico non disponibile. Riprova.";
+      }
+      return;
+    }
+    if (playback!==run) return;
+    run.loading=false;
+  }
+  function showDay(date) {
+    if (date===latest) stopPlayback(false);
+    setDailyDay(date);
+    applyDateView();
+    if (playback===run) run.timer=setTimeout(()=>showDay(addDays(date,1)),900);
+  }
+  showDay(start);
+}
 async function navigateDay(target) {
   if (!state.data || !dailyMetrics.includes(state.mapMetric)) return;
+  stopPlayback();
   const data=state.data, current=boundsFor(state.mapMetric)[1], view=activeView();
   if (!target || target===current || target<data.daily.start || target>data.latest) return;
   if (loadingDay) { renderDayNav(state.mapMetric); return; }
@@ -588,6 +634,7 @@ async function navigateDay(target) {
   setDailyDay(target);
   applyDateView();
 }
+$("day-play").addEventListener("click",playDays);
 for (const [id,step] of [["day-prev",-1],["day-next",1],["day-latest",0]]) {
   $(id).addEventListener("click",()=>{
     const data=state.data;
@@ -596,7 +643,9 @@ for (const [id,step] of [["day-prev",-1],["day-next",1],["day-latest",0]]) {
     navigateDay(step===0 ? data.latest : stepDay(current,step,data.daily.start,data.latest));
   });
 }
+$("day-select").addEventListener("pointerdown",()=>stopPlayback());
 $("day-select").addEventListener("change",event=>navigateDay(event.target.value));
+document.addEventListener("visibilitychange",()=>{ if (document.hidden) stopPlayback(); });
 function renderDates() {
   const key=activeView()==="valli" ? state.compareMetric : state.mapMetric;
   const fixed=key==="gdd" || key==="spring";
@@ -968,6 +1017,7 @@ for (const button of document.querySelectorAll("[data-metric]")) button.addEvent
   if (!state.data) return;
   if ($("metric-picker").open) closeSheet($("metric-picker"));
   state.mapMetric=button.dataset.metric;
+  if (!dailyMetrics.includes(state.mapMetric)) stopPlayback(false);
   renderMap();
 });
 createMetricControls($("compare-metrics"),"compareMetric",()=>{datesEdited=false;compare();});
@@ -1061,6 +1111,7 @@ $("stations-toggle").addEventListener("click",()=>{state.stations=!state.station
 const openers=new WeakMap();
 for (const button of document.querySelectorAll("[data-open]")) {
   button.addEventListener("click",()=>{
+    stopPlayback();
     const target=$(button.dataset.open);
     if (target.open) {closeSheet(target);return;}
     for (const other of document.querySelectorAll("dialog[open]")) closeSheet(other,false);
@@ -1075,6 +1126,7 @@ for (const button of document.querySelectorAll("[data-open]")) {
 }
 for (const anchor of document.querySelectorAll('a[data-view="valli"],a[data-view="metodo"],#map-compare')) {
   anchor.addEventListener("click",()=>{
+    stopPlayback();
     openers.set($(anchor=== $("map-compare") ? "valli" : anchor.dataset.view),anchor);
   });
 }
@@ -1247,6 +1299,7 @@ frame.addEventListener("click",event=>{
   if (state.data && !blockClick) inspectPoint(mapPoint(event.clientX,event.clientY));
 });
 window.addEventListener("hashchange",()=>{
+  stopPlayback(false);
   if (state.data) openSharedRoute(); else showRoute();
 });
 showRoute();

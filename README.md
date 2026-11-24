@@ -6,7 +6,7 @@ Un atlante indipendente per vedere dove ha fatto più freddo, caldo o dove è pi
 
 ## Come si usa
 
-1. Scegli **Minima**, **Massima** o **Pioggia**. Usa le frecce o scegli una data; **Più recente** torna all’ultimo dato disponibile.
+1. Scegli **Minima**, **Massima** o **Pioggia**. Usa le frecce o scegli una data. Premi **Riproduci** per vedere come cambiano mappa e valori del comune giorno per giorno; **Più recente** torna all’ultimo dato.
 2. Cerca un comune per vedere i suoi valori stimati e gli **Ultimi 7 giorni**. Salvalo per ritrovarlo quando riapri il sito dallo stesso browser.
 3. Apri **Altre mappe** per vedere gelo, caldo e pioggia nel tempo. Usa **Filtri** per cambiare date o quota, **Confronta valli** per vedere due territori affiancati e **Condividi** per copiare il link o scaricare i dati.
 

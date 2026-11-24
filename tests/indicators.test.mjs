@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {aggregate, areaStats, dayIndex, addDays, stepDay, shownMeanDifference} from "../web/indicators.mjs";
+import {aggregate, areaStats, dayIndex, addDays, stepDay, playbackStart, shownMeanDifference} from "../web/indicators.mjs";
 
 test("comparison difference agrees with the displayed one-decimal means",()=>{
   assert.equal(shownMeanDifference(3.049,3.051),-.1);
@@ -50,6 +50,12 @@ test("daily navigation can reach both archive limits but never crosses them",()=
   assert.equal(stepDay("2026-10-26",-1,...limits),"2026-10-25");
   assert.equal(stepDay("2026-10-26",1,...limits),"2026-10-27");
   assert.equal(stepDay("2026-10-27",1,...limits),null);
+});
+
+test("playing from latest starts seven days back inclusive, or at the archive start",()=>{
+  assert.equal(playbackStart("2026-11-23","2026-08-26","2026-11-23"),"2026-11-17");
+  assert.equal(playbackStart("2026-11-23","2026-11-20","2026-11-23"),"2026-11-20");
+  assert.equal(playbackStart("2026-11-21","2026-11-20","2026-11-23"),"2026-11-21");
 });
 
 test("province-wide statistics include all valleys but exclude cells outside Trentino",()=>{

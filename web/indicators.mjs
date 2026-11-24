@@ -6,6 +6,11 @@ export function stepDay(iso, step, first, last) {
   const next=addDays(iso,step);
   return next>=first && next<=last ? next : null;
 }
+export function playbackStart(iso, first, last) {
+  if (iso!==last) return iso;
+  const start=addDays(last,-6);
+  return start<first ? first : start;
+}
 export const peakDays = {storm:1, storm48:2, storm72:3};
 const comparisonDigits = {maximumFractionDigits:1};
 const comparisonScale = new Intl.NumberFormat("en",{...comparisonDigits,useGrouping:false});
