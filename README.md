@@ -1,6 +1,6 @@
 # Atlante Meteo Trentino
 
-Atlante indipendente in italiano. Mappe, schede comunali e confronti tra due valli nella stessa fascia di quota. Scegli un intervallo negli ultimi 90 giorni, oppure esplora gelo primaverile, caldo estivo e somma termica stagionale. Condividi una vista o esporta CSV, PNG e PDF tramite la stampa. Le stime riguardano condizioni passate, non sono allerte e non misurano il clima o la resa agricola.
+Atlante indipendente in italiano. Sposta e ingrandisci la mappa, cerca un comune o seleziona un punto per leggere la stima. I pannelli raccolgono filtri, confronti tra valli, fonti ed esportazioni. Le stime riguardano condizioni passate, non sono allerte e non misurano il clima o la resa agricola.
 
 ## Avvio
 
@@ -14,6 +14,8 @@ OPENBLAS_NUM_THREADS=1 .venv/bin/python refresh.py
 ```
 
 `web/` è il sito statico; la stessa cartella si può pubblicare con un qualsiasi servizio statico. Le mappe predefinite usano `data/atlas.json.gz`; le serie giornaliere vengono scaricate solo quando si seleziona un periodo personalizzato. Per Devin Apps, impostare `ATLAS_SNAPSHOT` al percorso assoluto di `atlas.json.gz` e usare lo stesso percorso per `refresh.py --output`, con `--cache` fuori dal checkout e `--trigger cron`. Le serie di ciascuna versione sono scritte prima di pubblicare il nuovo atlante.
+
+Per provare modifiche senza riscaricare i dati, usa lo stesso percorso assoluto in `ATLAS_SNAPSHOT` e una porta libera, per esempio `8766`. Il file delle serie giornaliere deve restare accanto allo snapshot.
 
 ## Pubblicazione e aggiornamento
 

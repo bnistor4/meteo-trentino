@@ -9,6 +9,8 @@ DATA = Path(os.environ.get("ATLAS_SNAPSHOT", WEB / "data" / "atlas.json.gz"))
 ROUTES = {"/": WEB / "index.html", "/index.html": WEB / "index.html",
           "/style.css": WEB / "style.css", "/app.js": WEB / "app.js",
           "/indicators.mjs": WEB / "indicators.mjs",
+          "/inter-latin.woff2": WEB / "inter-latin.woff2",
+          "/OFL-Inter.txt": WEB / "OFL-Inter.txt",
           "/icon.svg": WEB / "icon.svg", "/data/atlas.json.gz": DATA}
 HEADERS = [
     ("Cache-Control", "no-cache"), ("X-Content-Type-Options", "nosniff"),

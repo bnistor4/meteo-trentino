@@ -39,7 +39,7 @@ export function areaStats(values, areaGrid, elevation, id, [lo, hi], peaks) {
   let sum = 0, min = Infinity, max = -Infinity, count = 0, cells = 0, peak = -1;
   let zSum = 0, zMin = Infinity, zMax = -Infinity;
   for (let i = 0; i < values.length; i++) {
-    if (areaGrid[i] !== id || elevation[i] < lo || elevation[i] >= hi) continue;
+    if ((id === null ? areaGrid[i] <= 0 : areaGrid[i] !== id) || elevation[i] < lo || elevation[i] >= hi) continue;
     cells++;
     const v = values[i];
     if (!Number.isFinite(v)) continue;
