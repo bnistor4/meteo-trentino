@@ -77,7 +77,7 @@ function boundsFor(key) {
   if (key === "gdd") return [d.seasonStart,d.seasonEnd];
   if (key === "spring") return [d.springStart,d.springEnd];
   if (dailyMetrics.includes(key)) {
-    const end=state.mapDay ?? state.dates?.[1] ?? d.latest;
+    const end=state.mapDay ?? d.latest;
     return [end,end];
   }
   if (state.dates) return state.dates;
@@ -99,7 +99,9 @@ function mapHash(view=activeView(), overrides={}) {
   if (s.center) p.set("centro",s.center.map(n=>n.toFixed(3)).join(","));
   if (s.cell!==null) p.set("punto",s.cell);
   if (s.station) p.set("stazione",s.station.id);
-  if (s.mapDay) p.set("giorno",s.mapDay);
+  const key=view==="valli" ? s.compareMetric : s.mapMetric;
+  const mapDay=s.mapDay ?? (s.dates && dailyMetrics.includes(key) ? s.data.latest : null);
+  if (mapDay) p.set("giorno",mapDay);
   if (s.dates) { p.set("dal",s.dates[0]); p.set("al",s.dates[1]); }
   if (s.stations) p.set("stazioni","1");
   return "#"+view+"?"+p;
@@ -141,14 +143,17 @@ function restoreUrl() {
   const cell=p.get("punto");
   state.cell=cell && /^\d+$/.test(cell) && state.zoneArray[Number(cell)]>0 ? Number(cell) : null;
   state.station=d.stations.find(s=>String(s.id)===p.get("stazione")) ?? null;
-  const from=p.get("dal"), to=p.get("al"), mapDay=p.get("giorno");
+  const from=p.get("dal"), to=p.get("al");
+  const key=activeView()==="valli" ? state.compareMetric : state.mapMetric;
+  const legacyDay=!p.has("giorno") && from===to && dailyMetrics.includes(key) ? to : null;
+  const mapDay=p.get("giorno") ?? legacyDay;
   const iso=s=>/^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) && addDays(s,0)===s;
-  const requested=iso(from) && iso(to) && from<=to;
+  const requested=!legacyDay && iso(from) && iso(to) && from<=to;
   const dates=requested && from>=d.daily.start && to<=d.latest ? [from,to] : null;
   const chosen=iso(mapDay) && mapDay>=d.daily.start && mapDay<=d.latest ? mapDay : null;
   state.dates=state.daily ? dates : null;
   state.mapDay=state.daily || chosen===d.latest ? chosen : null;
-  const expired=(requested && !dates) || (mapDay && !chosen);
+  const expired=(requested && !dates) || (!!mapDay && !chosen);
   $("date-status").textContent=expired ? "La data del link non è più disponibile. Mostro i dati disponibili." : "";
   state.stations=p.get("stazioni")==="1";
   return {dates,mapDay:chosen,expired};
@@ -558,7 +563,7 @@ function renderDayNav(key) {
   $("day-latest").disabled=to===latest;
 }
 function setDailyDay(date) {
-  state.mapDay=date===state.data.latest && !state.dates ? null : date;
+  state.mapDay=date===state.data.latest ? null : date;
 }
 async function navigateDay(target) {
   if (!state.data || !dailyMetrics.includes(state.mapMetric)) return;
