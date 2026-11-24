@@ -10,7 +10,7 @@
 }
 *,*::before,*::after { box-sizing:border-box }
 [hidden] { display:none !important }
-body { margin:0; height:100vh; height:100dvh; display:grid; grid-template-rows:auto minmax(0,1fr); overflow:hidden }
+body { margin:0; height:100vh; height:100dvh; display:grid; grid-template:auto auto minmax(0,1fr) / minmax(0,1fr); overflow:hidden }
 h1,h2,h3,p { margin:0 }
 a { color:inherit }
 button,select,input { font:inherit; color:inherit }
@@ -40,7 +40,24 @@ svg { flex:none }
 #comune-results li { padding:2px 6px }
 #comune-results button { display:block; width:100%; text-align:left; min-height:44px; padding:7px 10px; border:0; border-radius:8px; background:white }
 #comune-results button:is(:hover,:focus-visible) { background:var(--soft) }
-#contenuto { position:relative; isolation:isolate; min-width:0; min-height:0; background:var(--map) }
+.day-nav { z-index:2; display:flex; align-items:center; justify-content:center; gap:4px; padding:0 var(--inset); background:white; border-bottom:1px solid var(--line) }
+.day-current { flex:0 1 144px; min-width:0; text-align:center; line-height:1.15 }
+.day-current select { max-width:100%; min-height:24px; border:0; border-radius:6px; background:var(--soft); font-weight:750; font-size:13px; font-variant-numeric:tabular-nums }
+.day-current small { display:block; margin-top:2px; color:var(--muted); font-size:11px }
+.day-current small.stale { color:#8b441c }
+#day-play,#day-latest { padding-inline:9px; color:var(--accent) }
+#day-play { min-width:100px; background:var(--accent-bg) }
+#day-play:hover:not(:disabled) { background:#d8e6f1 }
+@media (max-width:430px) {
+  .day-nav { gap:2px; padding-inline:6px }
+  #day-latest { width:44px; flex:none; padding:0 }
+  #day-latest span { display:none }
+}
+@media (max-width:350px) {
+  #day-play { width:44px; min-width:44px; flex:none; padding:0 }
+  #day-play span { display:none }
+}
+#contenuto { grid-row:3; position:relative; isolation:isolate; min-width:0; min-height:0; background:var(--map) }
 .map-figure { position:absolute; inset:0; overflow:hidden; background:radial-gradient(ellipse at 55% 47%,#f5f7f7 0%,var(--map) 75%) }
 #atlas-map { display:block; width:100%; height:100%; user-select:none; touch-action:none; cursor:grab }
 #atlas-map:focus-visible { outline-offset:-4px }
@@ -206,6 +223,7 @@ body { padding-top:env(safe-area-inset-top) }
 .daily-values > div { display:grid; padding:5px 7px; border-radius:8px; background:var(--soft) }
 #daily-table { min-width:0; margin-bottom:8px }
 #daily-table :is(th,td) { padding:5px; white-space:nowrap }
+#daily-table tr:has([aria-current="date"]) { background:var(--accent-bg) }
 .sheet.dock { position:fixed; inset:88px var(--inset) auto auto; margin:0; width:min(438px,calc(100% - 2 * var(--inset))); max-height:calc(100dvh - 112px) }
 .sheet.dock.wide { width:min(620px,calc(100% - 2 * var(--inset))) }
 .sheet:is(#metric-picker,.share-menu) { left:min(var(--panel-left,24px),calc(100vw - 410px)); right:auto; top:132px }
@@ -297,5 +315,5 @@ details[open] > summary::after { transform:rotate(225deg) }
   body { height:auto; overflow:visible; display:block; print-color-adjust:exact; -webkit-print-color-adjust:exact }
   .top { display:flex; min-height:0; padding:0 0 5mm }
   #contenuto { height:145mm; background:var(--map) }
-  .search,.top nav,.toolbar,.map-tools,.sheet,.map-key .icon-button,.area-panel,.skip { display:none !important }
+  .search,.top nav,.day-nav,.toolbar,.map-tools,.sheet,.map-key .icon-button,.area-panel,.skip { display:none !important }
 }

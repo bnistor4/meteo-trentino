@@ -31,6 +31,27 @@
     </nav>
   </header>
 
+  <div class="day-nav" id="day-nav" role="group" aria-label="Giorno della mappa" hidden>
+    <button class="control" id="day-play" type="button" aria-label="Riproduci i giorni" title="Riproduci i giorni">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path id="day-play-icon" d="m8 5 11 7-11 7z"/></svg>
+      <span id="day-play-text">Riproduci</span>
+    </button>
+    <button class="icon-button" id="day-prev" type="button" aria-label="Giorno precedente" title="Giorno precedente">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>
+    </button>
+    <div class="day-current">
+      <select id="day-select" aria-label="Scegli il giorno della mappa" aria-describedby="day-status"></select>
+      <div role="status" id="day-announcement"><time class="sr-only" id="map-day"></time><small id="day-status"></small></div>
+    </div>
+    <button class="icon-button" id="day-next" type="button" aria-label="Giorno successivo" title="Giorno successivo">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+    </button>
+    <button class="control" id="day-latest" type="button" aria-label="Torna all’ultimo giorno con dati" title="Torna all’ultimo giorno con dati">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 6 6 6-6 6m10-12v12"/></svg>
+      <span>Più recente</span>
+    </button>
+  </div>
+
   <main id="contenuto" tabindex="-1" aria-label="Mappa meteo del Trentino">
     <div id="map-figure" class="map-figure">
       <svg id="atlas-map" viewBox="0 0 800 680" tabindex="0" role="group" aria-label="Mappa del Trentino" aria-describedby="map-help"></svg>
@@ -208,7 +229,7 @@
       <section>
         <h3>Come si usa</h3>
         <ol class="guide-steps">
-          <li>Scegli <strong>Minima</strong>, <strong>Massima</strong> o <strong>Pioggia</strong> per l’ultimo giorno con dati.</li>
+          <li>Scegli <strong>Minima</strong>, <strong>Massima</strong> o <strong>Pioggia</strong>. Usa le frecce o scegli una data. Con <strong>Riproduci</strong> vedi come il meteo è cambiato negli ultimi sette giorni, o a partire dalla data che hai scelto.</li>
           <li>Cerca il tuo comune per vedere gli ultimi sette giorni. Salvalo per ritrovarlo su questo browser.</li>
           <li>Tocca o fai clic sulla mappa per leggere la stima in un punto. Attiva <strong>Stazioni</strong> per vedere le misure raccolte sul posto.</li>
         </ol>

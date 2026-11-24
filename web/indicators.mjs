@@ -2,6 +2,15 @@ const missing = -32768;
 const msPerDay = 86400000;
 export const dayIndex = (iso, origin) => (Date.parse(iso) - Date.parse(origin)) / msPerDay;
 export const addDays = (iso, days) => new Date(Date.parse(iso) + days * msPerDay).toISOString().slice(0, 10);
+export function stepDay(iso, step, first, last) {
+  const next=addDays(iso,step);
+  return next>=first && next<=last ? next : null;
+}
+export function playbackStart(iso, first, last) {
+  if (iso!==last) return iso;
+  const start=addDays(last,-6);
+  return start<first ? first : start;
+}
 export const peakDays = {storm:1, storm48:2, storm72:3};
 const comparisonDigits = {maximumFractionDigits:1};
 const comparisonScale = new Intl.NumberFormat("en",{...comparisonDigits,useGrouping:false});

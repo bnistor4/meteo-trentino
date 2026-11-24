@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {aggregate, areaStats, dayIndex, addDays, shownMeanDifference} from "../web/indicators.mjs";
+import {aggregate, areaStats, dayIndex, addDays, stepDay, playbackStart, shownMeanDifference} from "../web/indicators.mjs";
 
 test("comparison difference agrees with the displayed one-decimal means",()=>{
   assert.equal(shownMeanDifference(3.049,3.051),-.1);
@@ -42,6 +42,20 @@ test("area stats count only eligible elevations and include the highest cell's d
 test("solar dates span the change to winter time without an extra hour",()=>{
   assert.equal(dayIndex("2026-10-26","2026-10-24"),2);
   assert.equal(addDays("2026-10-24",2),"2026-10-26");
+});
+
+test("daily navigation can reach both archive limits but never crosses them",()=>{
+  const limits=["2026-10-25","2026-10-27"];
+  assert.equal(stepDay("2026-10-25",-1,...limits),null);
+  assert.equal(stepDay("2026-10-26",-1,...limits),"2026-10-25");
+  assert.equal(stepDay("2026-10-26",1,...limits),"2026-10-27");
+  assert.equal(stepDay("2026-10-27",1,...limits),null);
+});
+
+test("playing from latest starts seven days back inclusive, or at the archive start",()=>{
+  assert.equal(playbackStart("2026-11-23","2026-08-26","2026-11-23"),"2026-11-17");
+  assert.equal(playbackStart("2026-11-23","2026-11-20","2026-11-23"),"2026-11-20");
+  assert.equal(playbackStart("2026-11-21","2026-11-20","2026-11-23"),"2026-11-21");
 });
 
 test("province-wide statistics include all valleys but exclude cells outside Trentino",()=>{
