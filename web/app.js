@@ -479,8 +479,8 @@ function compare() {
   const [first,top]=zones[0];
   const leaders=zones.filter(([,s])=>score(s)===2 && fmt(s.mean)===fmt(top?.mean));
   if (leaders.length>1) {
-    const allZero=leaders.every(([,s])=>s.max===0);
-    $("leader-text").textContent=allZero ? "Nessun evento stimato nelle valli con copertura sufficiente." :
+    const allZero=zones.every(([,s])=>score(s)!==2 || (s.min===0 && s.max===0));
+    $("leader-text").textContent=allZero ? "Valori tutti a zero nelle valli con copertura sufficiente." :
       leaders.length+" valli hanno la stessa media alla precisione mostrata.";
   } else if (score(top)===2) {
     $("leader-text").textContent=(m.reverse ? "Media più bassa" : "Media più alta")+": "+first.name+", "+value(top.mean,key)+
