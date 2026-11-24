@@ -93,6 +93,10 @@ function syncUrl() {
   if (!state.data) return;
   history.replaceState(null,"",mapHash());
   for (const anchor of document.querySelectorAll("a[data-view]")) anchor.href=mapHash(anchor.dataset.view);
+  for (const anchor of $("compare-rows").querySelectorAll("a[data-zone]")) {
+    anchor.href=mapHash("mappa",{mapMetric:state.compareMetric,mapBand:state.compareBand,
+      zone:Number(anchor.dataset.zone),comune:0,zoom:1.55});
+  }
   $("map-compare").href=mapHash("valli",{compareMetric:state.mapMetric,compareBand:state.mapBand,pairA:state.zone});
 }
 function restoreUrl() {
@@ -423,7 +427,7 @@ function compare() {
       bar.setAttribute("aria-hidden","true"); bar.append(inside); mean.append(bar);
     }
     const mapLink=el("a","Mappa →","inline-link");
-    mapLink.href=mapHash("mappa",{mapMetric:key,mapBand:band,zone:z.id,comune:0,zoom:1.55});
+    mapLink.dataset.zone=z.id;
     mapLink.setAttribute("aria-label","Mostra "+z.name+" sulla mappa");
     const linkCell=el("td"); linkCell.append(mapLink);
     tr.append(title,mean,el("td",s ? fmt(s.min)+" – "+value(s.max,key) : "—"),
