@@ -40,7 +40,7 @@ MISSING = -32768
 STRIDE = 3
 BANDS = {"all": (0, 5000), "low": (0, 800), "mid": (800, 1400), "high": (1400, 5000)}
 RECENT_DAYS = 90
-PIPELINE_VERSION = 4
+PIPELINE_VERSION = 5
 DAILY_KEYS = ("min", "max", "mean", "rain")
 EXTREMA_QUALITY = {1, 2, 3, 7, 145}
 
@@ -256,11 +256,12 @@ def snapshot(summary, station_catalog, boundaries, municipalities, dem_meta, dem
     if min(len(source.get(last, {})) for source in sources.values()) < 20:
         raise ValueError(f"Insufficient station data for last complete solar day {last.isoformat()}")
     grid, mask, lon, lat, z, zone_idx, zones = grid_and_zones(dem_meta, dem, boundaries)
-    comune_idx, comuni = territories(municipalities, lon, lat, "codice",
-                                    lambda p, _: p["nome"].title().replace("' ", "'"), 0.00035)
+    slon, slat, sz = (np.array([s[k] for s in stations]) for k in ("lon", "lat", "z"))
+    codes, comuni = territories(municipalities, np.concatenate([lon, slon]), np.concatenate([lat, slat]),
+                              "codice", lambda p, _: p["nome"].title().replace("' ", "'"), 0.00035)
+    comune_idx, station_comune = np.split(codes, [len(lon)])
     if len(comuni) < 150 or len({x["id"] for x in comuni}) != len(comuni) or (comune_idx > 0).mean() < 0.96:
         raise ValueError("Unexpected municipal boundary coverage")
-    slon, slat, sz = (np.array([s[k] for s in stations]) for k in ("lon", "lat", "z"))
     d = distances(lon, lat, slon, slat)
 
     def project(samples, temperature):
@@ -315,7 +316,7 @@ def snapshot(summary, station_catalog, boundaries, municipalities, dem_meta, dem
 
     visible_stations = []
     for i in sorted(set().union(*(s[last] for s in sources.values()))):
-        point = dict(stations[i])
+        point = dict(stations[i], comune=int(station_comune[i]))
         for key, source in sources.items():
             if i in source[last]:
                 point[key] = round(float(source[last][i]), 1)

@@ -358,13 +358,9 @@ function readLocalStation() {
   const box=$("local-station");
   box.hidden=!state.comune || !state.data.stations.length;
   if (box.hidden) return;
-  const {w,h}=state.data.grid, [lon,lat]=selectedArea().center;
+  const [lon,lat]=selectedArea().center;
   const km=s=>111.195*Math.hypot((s.lon-lon)*Math.cos(lat*Math.PI/180),s.lat-lat);
-  const belongs=s=>{
-    const [x,y]=project(s.lon,s.lat).map(Math.floor);
-    return x>=0 && x<w && y>=0 && y<h && state.comuneArray[y*w+x]===state.comune;
-  };
-  const stations=state.data.stations.map(s=>({s,km:km(s),local:belongs(s)}))
+  const stations=state.data.stations.map(s=>({s,km:km(s),local:s.comune===state.comune}))
     .sort((a,b)=>b.local-a.local || a.km-b.km);
   const [station]=stations, [lo,hi]=bandBounds[state.mapBand];
   const {s}=station;
