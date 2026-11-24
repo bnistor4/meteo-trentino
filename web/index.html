@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Atlante indipendente dei rischi meteorologici e del potenziale termico agricolo in Trentino, dai dati aperti di Meteotrentino.">
+  <meta name="theme-color" content="#172f29">
+  <title>Atlante Meteo Trentino</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#contenuto">Salta al contenuto</a>
+  <header class="top">
+    <div class="wrap top-inner">
+      <a class="brand" href="#mappa" aria-label="Atlante Meteo Trentino, mappa">
+        <img src="icon.svg" width="41" height="41" alt="">
+        <span>Atlante Meteo <strong>Trentino</strong></span>
+      </a>
+      <nav aria-label="Navigazione principale">
+        <a href="#mappa" id="link-mappa" data-view="mappa">Mappa</a>
+        <a href="#valli" id="link-valli" data-view="valli">Confronta valli</a>
+        <a href="#metodo" id="link-metodo" data-view="metodo">Metodo e fonti</a>
+      </nav>
+    </div>
+  </header>
+  <main id="contenuto" class="wrap" tabindex="-1">
+    <section class="hero">
+      <div>
+        <div class="eyebrow"><span class="dash"></span> OSSERVATORIO DEL TERRITORIO</div>
+        <h1 id="page-title">Il meteo, valle per valle.</h1>
+        <p id="intro">Dalle stazioni al territorio: esplora gelo, caldo e piogge, oppure confronta il calore disponibile per le colture.</p>
+      </div>
+      <div class="fresh">
+        <div class="fresh-top"><span class="light"></span><span id="source-status">CARICAMENTO DATI</span></div>
+        <strong id="latest">—</strong>
+        <span id="network">Archivio Meteotrentino</span>
+      </div>
+    </section>
+    <div id="error" class="empty" hidden>Non riusciamo a caricare i dati. <button type="button" id="retry" class="linklike">Riprova</button></div>
+    <form id="date-controls" class="card date-controls" hidden>
+      <div class="action-row">
+        <label class="select-label">Dal <input type="date" id="date-start" required></label>
+        <label class="select-label">Al <input type="date" id="date-end" required></label>
+        <button class="action" type="submit">Applica periodo</button>
+        <button class="action" type="button" id="date-reset">Periodo predefinito</button>
+      </div>
+      <small id="date-hint"></small><small id="date-status" role="status"></small>
+    </form>
+    <section id="mappa" class="view" aria-labelledby="map-title">
+      <div class="section-head">
+        <div><div class="eyebrow"><span class="step">01</span> ESPLORA</div><h2 id="map-title">Mappa del territorio</h2></div>
+        <label class="select-label">Fascia di quota <select id="map-band"></select></label>
+      </div>
+      <div class="pills" id="metrics" aria-label="Indicatore della mappa"></div>
+      <div class="card territory-tools">
+        <label class="select-label zone-label">Comunità di valle <select id="map-zone"></select></label>
+        <form id="comune-form" class="search">
+          <label class="select-label">Cerca un comune <input type="search" id="comune-search" placeholder="Es. Trento" autocomplete="off" aria-controls="comune-results"></label>
+          <ul id="comune-results" aria-label="Comuni trovati"></ul>
+        </form>
+      </div>
+      <div class="map-layout">
+        <div class="card map-card">
+          <div class="map-context">
+            <strong id="map-context"></strong>
+            <small>Dati passati, non allerte. <a href="https://www.meteotrentino.it/contatti-e-informazioni/sistema-di-allerta-provinciale/">Allerte ufficiali</a></small>
+          </div>
+          <div id="map-error" class="empty" hidden>La mappa non è disponibile. <button type="button" id="retry-map" class="linklike">Riprova</button></div>
+          <div class="map-figure" id="map-figure">
+            <svg id="atlas-map" viewBox="0 0 800 680" role="group" aria-label="Mappa interattiva della Provincia autonoma di Trento"></svg>
+            <div class="map-controls">
+              <button type="button" id="zoom-in" aria-label="Ingrandisci">+</button>
+              <button type="button" id="zoom-out" aria-label="Riduci">−</button>
+              <button type="button" id="zoom-reset" aria-label="Centra la mappa" title="Centra la mappa">⌖</button>
+            </div>
+            <div class="map-tag"><span class="compass">↑ N</span> <span>GRIGLIA 750 M</span></div>
+            <div id="tooltip" class="tooltip" hidden></div>
+          </div>
+          <div class="map-footer">
+            <div id="legend" class="legend"></div>
+            <label class="station-toggle"><input type="checkbox" id="show-stations"> Mostra stazioni</label>
+          </div>
+        </div>
+        <aside class="map-side">
+          <article class="card reading">
+            <div class="eyebrow"><span class="step">i</span> COME LEGGERLA</div>
+            <h3 id="metric-title">Gelo</h3>
+            <p id="metric-copy"></p>
+            <div class="window"><small>PERIODO</small><strong id="period">—</strong></div>
+            <p class="soft-note" id="metric-tip"></p>
+          </article>
+          <article class="card local">
+            <div class="eyebrow"><span class="step">⌖</span> IN DETTAGLIO</div>
+            <h3 id="area-name"></h3>
+            <div id="zone-read" aria-live="polite"></div>
+            <div id="local-station" class="local-station" hidden></div>
+            <a class="inline-link" href="#valli" id="map-compare">Confronta tutte le valli <span aria-hidden="true">→</span></a>
+          </article>
+        </aside>
+      </div>
+      <div class="card share-tools">
+        <div class="action-row">
+          <button type="button" class="action" id="copy-link">Copia link</button>
+          <button type="button" class="action" id="png">Scarica PNG</button>
+          <button type="button" class="action" id="csv">Scarica CSV</button>
+          <button type="button" class="action" id="print">Stampa / PDF</button>
+        </div>
+        <input id="share-url" aria-label="Link a questa vista" readonly hidden>
+        <small id="share-status" role="status"></small>
+      </div>
+      <div class="notice"><strong>Non è una previsione.</strong> La mappa ricostruisce condizioni passate tra le stazioni; consulta le <a href="https://www.meteotrentino.it/contatti-e-informazioni/sistema-di-allerta-provinciale/">allerte ufficiali della Protezione civile</a>.</div>
+    </section>
+    <section id="valli" class="view" aria-labelledby="compare-title" hidden>
+      <div class="section-head">
+        <div><div class="eyebrow"><span class="step">02</span> CONFRONTA</div><h2 id="compare-title">Le valli nella stessa fascia di quota</h2></div>
+        <label class="select-label">Fascia di quota <select id="compare-band"></select></label>
+      </div>
+      <div class="pills" id="compare-metrics" aria-label="Indicatore del confronto"></div>
+      <div class="compare-grid">
+        <article class="card reading compare-summary">
+          <div class="eyebrow"><span class="step">i</span> COSA EMERGE</div>
+          <h3 id="leader-title">—</h3>
+          <p id="leader-text"></p>
+          <div class="window"><small>PERIODO</small><strong id="compare-period">—</strong></div>
+        </article>
+        <article class="card reading compare-summary compare-note">
+          <div class="eyebrow"><span class="step">≠</span> DA TENERE A MENTE</div>
+          <h3 id="caveat-title">Stesso intervallo, quote diverse.</h3>
+          <p id="caveat-text"></p>
+        </article>
+      </div>
+      <article class="card pair">
+        <h3>Confronta due valli</h3>
+        <div class="action-row">
+          <label class="select-label">Prima valle <select id="pair-a"></select></label>
+          <label class="select-label">Seconda valle <select id="pair-b"></select></label>
+          <button class="action" type="button" id="pair-csv">Scarica CSV</button>
+          <button class="action" type="button" id="pair-copy">Copia didascalia e link</button>
+        </div>
+        <p id="pair-caption"></p>
+        <p id="pair-elevation"></p>
+        <small id="pair-status" role="status"></small>
+      </article>
+      <div class="card table-card">
+        <div class="table-head"><h3 id="table-title">Territori a confronto</h3><p>Medie sulle celle con stima. Non sono medie delle sole stazioni.</p></div>
+        <div class="table-scroll">
+          <table aria-labelledby="table-title">
+            <thead><tr><th scope="col">Territorio</th><th scope="col" id="sort-label">Media</th><th scope="col">Min.–max.</th><th scope="col">Celle con stima</th><th scope="col">Mappa</th></tr></thead>
+            <tbody id="compare-rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+    <section id="metodo" class="view" aria-labelledby="method-title" hidden>
+      <div class="section-head"><div><div class="eyebrow"><span class="step">03</span> VERIFICA</div><h2 id="method-title">Come nasce l’atlante</h2></div></div>
+      <div class="method-grid">
+        <article class="card reading"><h3>Misure e stime</h3><p>Minime e massime moderne degli Annali (400.55 e 400.56) derivano dagli estremi su intervalli di 15 minuti, non da singole letture istantanee. Il catalogo segnala possibili errori per minime alle 00:00. Non usiamo dati ricostruiti né sostituiamo gli estremi mancanti con campioni istantanei. Per la temperatura media (400.02) richiediamo almeno il 95% delle letture, per la pioggia (10.00) tutte. I dati possono essere provvisori.</p></article>
+        <article class="card reading"><h3>Tra una stazione e l’altra</h3><p>Stimiamo ogni cella di circa 750 m con fino a sei stazioni pesate con l’inverso del quadrato della distanza. Per la temperatura stimiamo anche l’effetto della quota (da −12 a +4 °C/km); senza almeno otto stazioni e 500 m di dislivello nella rete giornaliera, non applichiamo la correzione. La pioggia non è corretta per quota. Servono una stazione entro 15 km e almeno tre entro 30 km. La temperatura non è stimata oltre 550 m sopra la più alta delle stazioni usate.</p></article>
+        <article class="card reading"><h3>Errore sulle stazioni escluse</h3><p>Il <strong id="validation-date"></strong> abbiamo tolto una stazione a turno e stimato il valore nella sua posizione. Qui sotto la differenza assoluta media per le stazioni con stima possibile. È un controllo su un giorno, non una misura d’errore per ogni cella o stagione.</p><dl class="run-data" id="validation-data"></dl></article>
+        <article class="card reading"><h3>Giorni e stagioni</h3><p>Ogni giornata va da mezzanotte a mezzanotte in ora solare (UTC+1). Le finestre sono mostrate solo nelle celle in cui tutti i giorni sono stimabili. Per il caldo, il periodo predefinito è l’estate meteorologica in corso o l’ultima conclusa (giugno–agosto). Il potenziale termico somma, dal 1º aprile al 31 ottobre, la parte della temperatura media giornaliera che supera 10 °C. In corso di stagione la somma arriva all’ultimo giorno utile; tra gennaio e marzo si usa l’ultima stagione conclusa.</p></article>
+        <article class="card reading"><h3>Piogge intense</h3><p>In ogni cella cerchiamo l’accumulo più alto su uno, due o tre giorni solari consecutivi. La media territoriale è la media di questi massimi, che possono cadere in giorni diversi. Il picco locale è il massimo di tutte le celle nella fascia scelta; mostriamo la prima data in caso di parità.</p></article>
+        <article class="card reading"><h3>Celle con stima</h3><p>La percentuale indica quante celle della fascia di quota scelta hanno una stima, non quanto la stima sia accurata. Sotto il 60% mostriamo i valori disponibili senza inserirli in classifica. Nella stessa fascia le quote effettive possono differire: non ri-pesiamo le valli per renderle equivalenti.</p></article>
+        <article class="card reading"><h3>Limiti</h3><p>Le stime non catturano sempre le inversioni termiche di fondovalle, i rovesci molto localizzati o i microclimi. Le soglie sono orientative, non allerte ufficiali. Poco accumulo di pioggia non basta a diagnosticare la siccità: contano anche acqua nel suolo, neve e domanda evaporativa.</p></article>
+        <article class="card reading"><h3>Aggiornamento dei dati</h3><p>Un processo pianificato controlla ogni giorno l’archivio. Se un aggiornamento non è valido resta disponibile l’ultima elaborazione riuscita.</p><dl class="run-data" id="run-data"></dl><a id="snapshot-link" class="inline-link" href="data/atlas.json.gz" download>Scarica i dati elaborati (JSON compresso) ↓</a></article>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <div class="wrap footer-layout">
+      <div><strong>Atlante Meteo Trentino</strong><p>Progetto indipendente · Stime, non allerte.</p></div>
+      <div>Dati: <a href="https://archivio.meteotrentino.it/share/#/scarica">Provincia Autonoma di Trento – Meteotrentino, Archivio Dati</a>, <a href="https://creativecommons.org/licenses/by/4.0/deed.it">CC BY 4.0</a>; elaborazioni dell’Atlante.<br>Rilievo: Tarquini et al. (2023), <a href="https://doi.org/10.13127/tinitaly/1.1">TINITALY 1.1, INGV</a>, CC BY 4.0. Confini: Provincia Autonoma di Trento, <a href="https://siatservices.provincia.tn.it/geonetwork/geonetwork/api/records/p_TN:58604ed2-ac1d-4f78-a00c-514fd3562c51">Comunità di valle</a> e <a href="https://siatservices.provincia.tn.it/geonetwork/geonetwork/api/records/p_TN:0dc5bc18-54de-4495-be3e-9e44f2135803">comuni</a>, CC0.</div>
+    </div>
+  </footer>
+</body>
+</html>
