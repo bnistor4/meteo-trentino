@@ -643,7 +643,7 @@ for (const [id,step] of [["day-prev",-1],["day-next",1],["day-latest",0]]) {
     navigateDay(step===0 ? data.latest : stepDay(current,step,data.daily.start,data.latest));
   });
 }
-$("day-select").addEventListener("pointerdown",()=>stopPlayback());
+$("day-select").addEventListener("focus",()=>stopPlayback());
 $("day-select").addEventListener("change",event=>navigateDay(event.target.value));
 document.addEventListener("visibilitychange",()=>{ if (document.hidden) stopPlayback(); });
 function renderDates() {
@@ -1028,6 +1028,7 @@ $("map-band").addEventListener("change", e=>{state.mapBand=e.target.value;render
 $("compare-band").addEventListener("change", e=>{state.compareBand=e.target.value;compare();});
 $("map-zone").addEventListener("change",e=>chooseArea(Number(e.target.value),0));
 $("comune-search").addEventListener("input",()=>{
+  stopPlayback();
   const results=$("comune-results"), matches=comuneMatches();
   results.replaceChildren();
   const query=$("comune-search").value.trim();

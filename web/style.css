@@ -10,7 +10,7 @@
 }
 *,*::before,*::after { box-sizing:border-box }
 [hidden] { display:none !important }
-body { margin:0; height:100vh; height:100dvh; display:grid; grid-template-rows:auto auto minmax(0,1fr); overflow:hidden }
+body { margin:0; height:100vh; height:100dvh; display:grid; grid-template:auto auto minmax(0,1fr) / minmax(0,1fr); overflow:hidden }
 h1,h2,h3,p { margin:0 }
 a { color:inherit }
 button,select,input { font:inherit; color:inherit }
@@ -41,19 +41,20 @@ svg { flex:none }
 #comune-results button { display:block; width:100%; text-align:left; min-height:44px; padding:7px 10px; border:0; border-radius:8px; background:white }
 #comune-results button:is(:hover,:focus-visible) { background:var(--soft) }
 .day-nav { z-index:2; display:flex; align-items:center; justify-content:center; gap:4px; padding:0 var(--inset); background:white; border-bottom:1px solid var(--line) }
-.day-current { min-width:0; width:144px; text-align:center; line-height:1.15 }
+.day-current { flex:0 1 144px; min-width:0; text-align:center; line-height:1.15 }
 .day-current select { max-width:100%; min-height:24px; border:0; border-radius:6px; background:var(--soft); font-weight:750; font-size:13px; font-variant-numeric:tabular-nums }
 .day-current small { display:block; margin-top:2px; color:var(--muted); font-size:11px }
 .day-current small.stale { color:#8b441c }
 #day-play,#day-latest { padding-inline:9px; color:var(--accent) }
-#day-play { background:var(--accent-bg) }
+#day-play { min-width:100px; background:var(--accent-bg) }
 #day-play:hover:not(:disabled) { background:#d8e6f1 }
 @media (max-width:430px) {
+  .day-nav { gap:2px; padding-inline:6px }
   #day-latest { width:44px; flex:none; padding:0 }
   #day-latest span { display:none }
 }
 @media (max-width:350px) {
-  #day-play { width:44px; flex:none; padding:0 }
+  #day-play { width:44px; min-width:44px; flex:none; padding:0 }
   #day-play span { display:none }
 }
 #contenuto { grid-row:3; position:relative; isolation:isolate; min-width:0; min-height:0; background:var(--map) }
