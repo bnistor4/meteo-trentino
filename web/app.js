@@ -16,7 +16,7 @@ const metrics = {
     copy:"Pioggia totale stimata nel periodo.",
     tip:"Senza un riferimento storico non sappiamo se il totale è anomalo. Non è una misura della siccità.",
     unit:"mm", range:[0,180], stops:["#f4f8fc","#c0def0","#75b6df","#3f83bf","#225285"]},
-  storm: {name:"Picco pioggia · 24 h", title:"Massima pioggia in un giorno",
+  storm: {name:"Massima pioggia in un giorno", title:"Massima pioggia in un giorno",
     copy:"Massima pioggia stimata in un giorno nel periodo selezionato.",
     tip:"I totali giornalieri non mostrano l’intensità dei temporali brevi.",
     unit:"mm", range:[0,100], stops:["#f4f8fc","#c0def0","#75b6df","#3f83bf","#225285"]},
@@ -42,7 +42,7 @@ Object.assign(metrics,{
     copy:"Pioggia totale stimata nel giorno indicato. Un millimetro equivale a un litro per metro quadrato.",range:[0,60]},
 });
 for (const [key,span] of Object.entries(peakDays).slice(1)) {
-  metrics[key] = {...metrics.storm, name:"Picco pioggia · "+span*24+" h",
+  metrics[key] = {...metrics.storm, name:"Massima pioggia in "+span+" giorni",
     title:"Massima pioggia in "+span+" giorni",
     copy:"Massima pioggia stimata su "+span+" giorni consecutivi nel periodo selezionato.",
     tip:"I giorni iniziano a mezzanotte in ora solare (UTC+1).",
@@ -67,6 +67,7 @@ const value = (number, key) => fmt(number) + " " + (metrics[key].unit==="gg" ? (
 const day = iso => new Intl.DateTimeFormat("it-IT",{day:"numeric",month:"short",year:"numeric",timeZone:"UTC"}).format(new Date(iso));
 const shortDay = iso => new Intl.DateTimeFormat("it-IT",{day:"numeric",month:"short",timeZone:"UTC"}).format(new Date(iso));
 const when = iso => new Intl.DateTimeFormat("it-IT",{dateStyle:"short",timeStyle:"short",timeZone:"Europe/Rome"}).format(new Date(iso));
+const observationsStale = latest => Date.now()-Date.parse(latest)>3*86400000;
 const activeView = () => {
   const view=location.hash.slice(1).split("?")[0];
   return views.includes(view) ? view : "mappa";
@@ -334,8 +335,7 @@ function toggleStations() {
   if (!state.stationLayer) return;
   const visible=!!state.stations;
   $("stations-toggle").setAttribute("aria-pressed",String(visible));
-  $("stations-toggle").setAttribute("aria-label",visible ? "Nascondi stazioni" : "Mostra stazioni");
-  $("stations-toggle").title=$("stations-toggle").getAttribute("aria-label");
+  $("stations-toggle").title=visible ? "Nascondi stazioni" : "Mostra stazioni";
   state.stationLayer.style.display=visible ? "" : "none";
   state.stationLayer.setAttribute("aria-hidden",String(!visible));
   const [lo,hi]=bandBounds[state.mapBand];
@@ -483,6 +483,11 @@ function readDailySummary() {
   const section=$("daily-summary"), rows=state.data.comuneTrends?.[state.comune], saved=state.comune===savedComune();
   section.hidden=!rows;
   if (!rows) return;
+  const zone=$("zone-read"), key=state.mapMetric;
+  const dailyFirst=dailyMetrics.includes(key) && boundsFor(key)[1]===state.data.latest &&
+    state.mapBand==="all" && state.cell===null && !state.station;
+  if (dailyFirst && section.nextElementSibling!==zone) zone.before(section);
+  else if (!dailyFirst && zone.nextElementSibling!==section) zone.after(section);
   $("save-comune").textContent=saved ? "Rimuovi dai salvati" : "Salva per le prossime visite";
   $("save-comune").setAttribute("aria-pressed",String(saved));
   $("daily-heading").textContent="Ultimo giorno · "+shortDay(state.data.latest);
@@ -583,7 +588,10 @@ function renderMap() {
   $("metric-tip").textContent=m.tip;
   const [from,to]=boundsFor(key);
   const seasonal=["spring","gdd"].includes(key) || (key==="heat" && !state.dates);
-  $("period").textContent=(from===to && to===state.data.latest ? "Ultimo giorno osservato: " : seasonal ? "Periodo stagionale: " : "")+period(key);
+  const latest=from===to && to===state.data.latest;
+  const stale=latest && observationsStale(to);
+  $("period").textContent=(stale ? "Dati non recenti: " : latest ? "Ultimo giorno con dati: " : seasonal ? "Periodo stagionale: " : "")+period(key);
+  $("period").classList.toggle("stale",stale);
   const warning=periodWarning(key);
   $("period-warning").hidden=!warning;
   $("period-warning").textContent=warning;
@@ -732,8 +740,8 @@ async function populate(d) {
   }
   d.comuni.sort((a,b)=>a.name.localeCompare(b.name,"it"));
   $("latest").textContent=day(d.latest);
-  const stale=Date.now()-Date.parse(d.latest)>3*86400000;
-  $("source-status").textContent=stale ? "Ultimi dati disponibili (non recenti)" : "Ultimo giorno osservato";
+  const stale=observationsStale(d.latest);
+  $("source-status").textContent=stale ? "Ultimi dati disponibili (non recenti)" : "Ultimo giorno con dati";
   $("source-status").closest(".fresh").classList.toggle("stale",stale);
   $("network").textContent=d.stations.length+" stazioni · Meteotrentino";
   const modes={cron:"Pianificazione giornaliera",programma:"Pubblicazione pianificata",manual:"Esecuzione manuale",deploy:"Prima pubblicazione"};
@@ -897,13 +905,18 @@ $("map-zone").addEventListener("change",e=>chooseArea(Number(e.target.value),0))
 $("comune-search").addEventListener("input",()=>{
   const results=$("comune-results"), matches=comuneMatches();
   results.replaceChildren();
+  const query=$("comune-search").value.trim();
+  const status=!query ? "" : !state.data ? ($("error").hidden ? "Dati in caricamento." : "Dati non disponibili.") :
+    matches.length===1 ? "Un comune trovato." :
+    matches.length ? matches.length+" comuni suggeriti." : "Nessun comune trovato.";
+  $("search-status").textContent=status;
   for (const area of matches) {
     const button=el("button",area.name);
     button.type="button";
     button.addEventListener("click",()=>openComune(area));
     const li=el("li"); li.append(button); results.append(li);
   }
-  if ($("comune-search").value.trim() && !matches.length) results.append(el("li","Nessun comune trovato."));
+  if (query && !matches.length) results.append(el("li",status));
 });
 $("comune-form").addEventListener("keydown",event=>{
   const buttons=[...$("comune-results").querySelectorAll("button")];
