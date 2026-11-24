@@ -122,8 +122,8 @@ function compareHash() {
 function restoreUrl() {
   const p=new URLSearchParams(location.hash.split("?")[1]), d=state.data;
   const pick=(object,key,fallback)=>Object.hasOwn(object,p.get(key)) ? p.get(key) : fallback;
-  state.mapMetric=pick(metrics,"m","min");
-  state.compareMetric=pick(metrics,"c",state.mapMetric);
+  state.mapMetric=pick(d.layers,"m",d.layers.min ? "min" : "frost");
+  state.compareMetric=pick(d.layers,"c",state.mapMetric);
   state.mapBand=pick(bands,"b","all");
   state.compareBand=pick(bands,"cb",state.mapBand);
   state.zone=Number(pick(state.zoneById,"z",0));
@@ -709,6 +709,9 @@ async function populate(d) {
   state.comuneArray=decode(d.comuneGrid);
   state.zoneById=Object.fromEntries(d.zones.map(z=>[z.id,z]));
   state.comuneById=Object.fromEntries(d.comuni.map(z=>[z.id,z]));
+  for (const button of document.querySelectorAll("[data-metric]")) button.hidden=!d.layers[button.dataset.metric];
+  document.querySelector(".daily-switch").hidden=dailyMetrics.every(key=>!d.layers[key]);
+  for (const opt of $("compare-metrics").options) opt.hidden=opt.disabled=!d.layers[opt.value];
   for (const id of ["map-zone","pair-a","pair-b"]) {
     $(id).replaceChildren();
     if (id==="map-zone") {
