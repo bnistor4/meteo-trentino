@@ -40,7 +40,7 @@ MISSING = -32768
 STRIDE = 3
 BANDS = {"all": (0, 5000), "low": (0, 800), "mid": (800, 1400), "high": (1400, 5000)}
 RECENT_DAYS = 90
-PIPELINE_VERSION = 5
+PIPELINE_VERSION = 6
 DAILY_KEYS = ("min", "max", "mean", "rain")
 EXTREMA_QUALITY = {1, 2, 3, 7, 145}
 
@@ -230,6 +230,31 @@ def rain_peak(rows, span):
     return values, peaks
 
 
+def comune_name(raw):
+    accents = {"male'": "Malè", "nicolo'": "Nicolò"}
+    small_words = {"di", "del", "della", "dello", "delle", "dei", "degli", "dal", "sul", "in"}
+    parts = raw.strip().lower().split()
+    return " ".join(accents.get(word, word if i and word in small_words else word.title())
+                    for i, word in enumerate(parts)).replace("' ", "'")
+
+
+def comune_trends(quantized, memberships, municipalities):
+    result = {}
+    for comune in municipalities:
+        code = comune["id"]
+        select = memberships == code
+        trend = []
+        for i in range(-7, 0):
+            row = []
+            for key in ("min", "max", "rain"):
+                samples = quantized[key][i, select]
+                valid = samples[np.isfinite(samples)]
+                row.append(round(float(valid.mean()) / 10, 1) if len(valid) else None)
+            trend.append(row)
+        result[code] = trend
+    return result
+
+
 def snapshot(summary, station_catalog, boundaries, municipalities, dem_meta, dem, paths):
     generated = datetime.fromisoformat(summary["generated_at"]).astimezone(SOLAR)
     last = generated.date() - DAY
@@ -258,7 +283,7 @@ def snapshot(summary, station_catalog, boundaries, municipalities, dem_meta, dem
     grid, mask, lon, lat, z, zone_idx, zones = grid_and_zones(dem_meta, dem, boundaries)
     slon, slat, sz = (np.array([s[k] for s in stations]) for k in ("lon", "lat", "z"))
     codes, comuni = territories(municipalities, np.concatenate([lon, slon]), np.concatenate([lat, slat]),
-                              "codice", lambda p, _: p["nome"].title().replace("' ", "'"), 0.00035)
+                              "codice", lambda p, _: comune_name(p["nome"]), 0.00035)
     comune_idx, station_comune = np.split(codes, [len(lon)])
     if len(comuni) < 150 or len({x["id"] for x in comuni}) != len(comuni) or (comune_idx > 0).mean() < 0.96:
         raise ValueError("Unexpected municipal boundary coverage")
@@ -298,6 +323,7 @@ def snapshot(summary, station_catalog, boundaries, municipalities, dem_meta, dem
         "frost": frost_indicator(quantized["min"][-30:]).sum(axis=0),
         "rain": recent_rain.sum(axis=0), "heat": heat, "spring": spring_frost,
         "gdd": gdd, "mean": quantized["mean"][-1],
+        "min": quantized["min"][-1], "max": quantized["max"][-1], "rainDay": quantized["rain"][-1],
     }
     peaks = {}
     for key, span in (("storm", 1), ("storm48", 2), ("storm72", 3)):
@@ -305,7 +331,7 @@ def snapshot(summary, station_catalog, boundaries, municipalities, dem_meta, dem
         peaks[key] = pack(np.where(day_indices >= 0, day_indices + RECENT_DAYS - 30, -1))
     if any(np.isfinite(x).mean() < 0.20 for x in fields.values()):
         raise ValueError("Less than 20% provincial coverage on an indicator; retaining the previous snapshot")
-    layers = {key: {"data": pack(values), "scale": 10 if key in {"rain", "storm", "storm48", "storm72", "mean"} else 1}
+    layers = {key: {"data": pack(values), "scale": 10 if key in {"rain", "rainDay", "storm", "storm48", "storm72", "mean", "min", "max"} else 1}
               for key, values in fields.items()}
     for key, indices in peaks.items():
         layers[key]["peaks"] = indices
@@ -333,6 +359,7 @@ def snapshot(summary, station_catalog, boundaries, municipalities, dem_meta, dem
         "daily": {"start": history_start.isoformat(), "scale": 10, "keys": DAILY_KEYS},
         "layers": layers,
         "zones": zones, "comuni": comuni, "stations": visible_stations, "validation": validation,
+        "comuneTrends": comune_trends(quantized, comune_idx, comuni),
     }, series
 
 

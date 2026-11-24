@@ -4,10 +4,25 @@ from datetime import date
 
 import numpy as np
 
-from refresh import complete_reduce, distances, eligible, encoded, estimate, frost_indicator, held_out_error, rain_peak, season, spring, summer
+from refresh import comune_name, comune_trends, complete_reduce, distances, eligible, encoded, estimate, frost_indicator, held_out_error, rain_peak, season, spring, summer
 
 
 class IndicatorTests(unittest.TestCase):
+    def test_comune_names_keep_accents_and_prepositions(self):
+        self.assertEqual(comune_name("BASELGA DI PINÈ"), "Baselga di Pinè")
+        self.assertEqual(comune_name("ALTOPIANO DELLA VIGOLANA"), "Altopiano della Vigolana")
+        self.assertEqual(comune_name("CENTA SAN NICOLO'"), "Centa San Nicolò")
+        self.assertEqual(comune_name("MALE'"), "Malè")
+
+    def test_comune_trends_are_daily_and_do_not_turn_missing_into_zero(self):
+        values = np.tile([40, 50, 100], (9, 1)).astype(float)
+        values[-2, :2] = np.nan
+        values[-1, 0] = np.nan
+        metrics = {key: values for key in ("min", "max", "rain")}
+        result = comune_trends(metrics, np.array([2, 2, 1]), [{"id": 1}, {"id": 2}])
+        self.assertEqual(result[2], [[4.5, 4.5, 4.5]] * 5 + [[None] * 3, [5, 5, 5]])
+        self.assertEqual(result[1], [[10, 10, 10]] * 7)
+
     def test_incomplete_days_are_not_silently_treated_as_zero(self):
         result = complete_reduce([np.array([-1, 1]), np.array([0, np.nan])], frost_indicator, np.sum)
         np.testing.assert_allclose(result, [2, np.nan])
