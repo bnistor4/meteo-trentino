@@ -348,7 +348,7 @@ function chooseArea(zone,comune) {
   state.zone=zone;
   state.comune=comune;
   if (comune) state.zoom=Math.max(2.65,state.zoom);
-  $("map-zone").value=zone;
+  $("map-zone").value=comune ? "" : zone;
   $("comune-search").value=comune ? selectedArea().name : "";
   $("comune-results").replaceChildren();
   drawSelection(); readZone(); updateZoom(); syncUrl();
@@ -377,7 +377,7 @@ function renderMap() {
   if (!state.data) return;
   const key=state.mapMetric, m=metrics[key];
   $("map-band").value=state.mapBand;
-  $("map-zone").value=state.zone;
+  $("map-zone").value=state.comune ? "" : state.zone;
   $("comune-search").value=state.comune ? selectedArea().name : "";
   $("metric-title").textContent=m.title;
   $("metric-copy").textContent=m.copy;
@@ -488,9 +488,13 @@ async function populate(d) {
   state.zoneById=Object.fromEntries(d.zones.map(z=>[z.id,z]));
   state.comuneById=Object.fromEntries(d.comuni.map(z=>[z.id,z]));
   restoreUrl();
-  $("map-zone").replaceChildren();
   for (const id of ["map-zone","pair-a","pair-b"]) {
     $(id).replaceChildren();
+    if (id==="map-zone") {
+      const placeholder=new Option("Torna a una valle","");
+      placeholder.disabled=true;
+      $(id).add(placeholder);
+    }
     for (const z of [...d.zones].sort((a,b)=>a.name.localeCompare(b.name,"it"))) option($(id),z.id,z.name);
   }
   d.comuni.sort((a,b)=>a.name.localeCompare(b.name,"it"));
