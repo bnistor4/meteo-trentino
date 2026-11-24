@@ -932,7 +932,7 @@ async function submitDates(close=false) {
   if (!state.data) return;
   const key=activeView()==="valli" ? state.compareMetric : state.mapMetric;
   const b=$("date-end").value, a=dailyMetrics.includes(key) ? b : $("date-start").value;
-  if (!datesEdited || ["spring","gdd"].includes(key) || (a===boundsFor(key)[0] && b===boundsFor(key)[1])) {
+  if ((close && !datesEdited) || ["spring","gdd"].includes(key) || (a===boundsFor(key)[0] && b===boundsFor(key)[1])) {
     if (close) closeSheet($("filters"));
     return;
   }
