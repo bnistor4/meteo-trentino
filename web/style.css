@@ -171,7 +171,7 @@ thead th { background:var(--soft); white-space:nowrap }
   .area-panel { max-height:54%; }
   .map-key { padding-block:4px }
 }
-@media(max-height:480px), (max-width:640px) and (max-height:700px) {
+@media (width > 640px) and (max-height:580px) {
   .map-controls { display:flex }
   .map-controls button { border-radius:0 !important }
   .map-controls button + button { border-top:0; border-left:1px solid var(--line) }
@@ -245,7 +245,15 @@ details[open] > summary::after { transform:rotate(225deg) }
 @media(max-width:640px) and (max-height:700px) {
   .area-panel { max-height:46% }
   #contenuto:has(.area-panel:not([hidden])) .map-tools { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; max-width:calc(100% - 2 * var(--inset)) }
+  #contenuto:has(.area-panel:not([hidden])) .map-controls { display:flex }
+  #contenuto:has(.area-panel:not([hidden])) .map-controls button { border-radius:0 }
+  #contenuto:has(.area-panel:not([hidden])) .map-controls button + button { border-top:0; border-left:1px solid var(--line) }
   #contenuto:has(.area-panel:not([hidden])) .map-tools > .control { padding-inline:8px }
+}
+@media (width > 640px) and (height > 420px) {
+  #contenuto { display:grid; grid-template-rows:minmax(0,1fr) auto; row-gap:8px; justify-items:end }
+  .map-tools { position:relative; inset:auto; grid-row:2; margin:0 var(--inset) calc(var(--inset) + 12px) 0 }
+  .area-panel { position:relative; inset:auto; grid-row:1; align-self:start; margin:18px var(--inset) 0 0; max-height:calc(100% - 18px) }
 }
 @media (min-width:520px) and (max-height:420px) {
   .area-panel { width:min(340px,49%); max-height:calc(100% - 76px); top:8px; bottom:auto }
