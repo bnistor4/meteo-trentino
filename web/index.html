@@ -50,10 +50,11 @@
       <button class="control share-button" type="button" data-open="share" aria-haspopup="dialog" aria-label="Condividi ed esporta">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M6 11H4v10h16V11h-2"/></svg><span>Condividi</span>
       </button>
-      <div id="active-filters" aria-label="Filtri attivi" hidden></div>
+      <div id="filter-status">
+        <div id="active-filters" aria-label="Filtri attivi" hidden></div>
+        <p id="period-warning" class="map-error floating" role="status" hidden></p>
+      </div>
     </div>
-
-    <p id="period-warning" class="map-error floating" role="status" hidden></p>
 
     <div id="error" class="map-error floating" role="alert" hidden>
       Dati non disponibili. <button type="button" id="retry" class="linklike">Riprova</button>

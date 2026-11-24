@@ -183,6 +183,7 @@ body { padding-top:env(safe-area-inset-top) }
 .daily-switch button,.active-chip { min-height:40px; padding:0 13px; border:0; border-radius:999px; background:white; color:var(--text); font-weight:650; font-size:13px }
 .daily-switch button[aria-pressed=true],#stations-toggle[aria-pressed=true] { background:var(--accent-bg); color:var(--accent) }
 .daily-switch button:hover,.active-chip:hover { background:var(--soft) }
+#filter-status { display:contents }
 #active-filters { flex-basis:100%; display:flex; flex-wrap:wrap; gap:5px; box-shadow:none; pointer-events:none }
 .active-chip { min-height:36px; box-shadow:var(--shadow); pointer-events:auto }
 .legend-scale,.legend-text { font-size:12px }
@@ -192,6 +193,7 @@ body { padding-top:env(safe-area-inset-top) }
 .out-band::before { background:#c6ced2 }
 .map-credit { bottom:env(safe-area-inset-bottom); flex-wrap:wrap; font-size:11px }
 .map-error { top:128px; max-width:calc(100% - 2 * var(--inset)) }
+#period-warning { top:110px; left:0; max-width:100% }
 .stat-secondary { font-weight:650 }
 .local-history { margin-top:5px }
 #daily-summary { border-top:1px solid var(--line); margin-top:12px; padding-top:8px }
@@ -235,6 +237,7 @@ details[open] > summary::after { transform:rotate(225deg) }
   .map-key { bottom:calc(22px + env(safe-area-inset-bottom)); width:min(275px,calc(100% - 105px)) }
   .key-header p { font-size:12px }
   .map-tools,.area-panel { bottom:calc(22px + env(safe-area-inset-bottom)) }
+  #period-warning { top:118px }
   #contenuto:has(.area-panel:not([hidden])) .map-tools { top:auto; bottom:calc(46% + 30px + env(safe-area-inset-bottom)) }
   #contenuto:has(.area-panel:not([hidden])) .map-key { visibility:hidden }
   .sheet,.sheet.dock,.sheet:is(#metric-picker,.share-menu) { inset:auto 0 0; margin:0 auto; width:100%; padding-bottom:env(safe-area-inset-bottom); border-radius:18px 18px 0 0 }
@@ -263,15 +266,19 @@ details[open] > summary::after { transform:rotate(225deg) }
   #contenuto:has(.area-panel:not([hidden])) {
     --local-width:clamp(300px,49%,340px);
     --map-bottom:calc(22px + env(safe-area-inset-bottom));
-    grid-template:[controls] min-content [notice] min-content [local] minmax(0,1fr) [tools] auto / minmax(0,1fr);
+    grid-template:[controls] min-content [local] minmax(0,1fr) [tools] auto / minmax(0,1fr);
     row-gap:0;
   }
-  #contenuto:has(.area-panel:not([hidden])) > :is(.toolbar,#period-warning,.area-panel,.map-tools,.map-key) { grid-column:1 }
-  #contenuto:has(.area-panel:not([hidden])) .toolbar { position:relative; inset:auto; grid-row:controls; justify-self:start; margin:8px var(--inset) }
-  #contenuto:has(.area-panel:not([hidden])):has(#period-warning:not([hidden])) #active-filters { flex-basis:auto }
-  #contenuto:has(.area-panel:not([hidden])) #period-warning {
-    position:relative; inset:auto; grid-row:notice; justify-self:start; margin:0 var(--inset) 8px; padding-block:6px;
+  #contenuto:has(.area-panel:not([hidden])) > :is(.toolbar,.area-panel,.map-tools,.map-key) { grid-column:1 }
+  #contenuto:has(.area-panel:not([hidden])) .toolbar {
+    position:relative; inset:auto; grid-row:controls; justify-self:stretch; margin:8px var(--inset);
   }
+  #contenuto:has(.area-panel:not([hidden])) #filter-status:has(#period-warning:not([hidden])) {
+    display:flex; flex-basis:100%; flex-wrap:wrap; align-items:center; gap:5px; box-shadow:none; pointer-events:none;
+  }
+  #contenuto:has(.area-panel:not([hidden])) #active-filters { flex-basis:auto }
+  #contenuto:has(.area-panel:not([hidden])) #filter-status:not(:has(#period-warning:not([hidden]))) #active-filters { flex-basis:100% }
+  #contenuto:has(.area-panel:not([hidden])) #period-warning { position:static; padding-block:6px; font-size:13px; pointer-events:auto }
   .area-panel { grid-row:local; width:var(--local-width); margin-top:0; max-height:calc(100% - 8px) }
   #contenuto:has(.area-panel:not([hidden])) .map-tools {
     grid-row:tools; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:4px;
