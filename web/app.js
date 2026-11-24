@@ -1,4 +1,4 @@
-import {addDays, dayIndex, peakDays, aggregate, areaStats} from "./indicators.mjs";
+import {addDays, dayIndex, peakDays, aggregate, areaStats, formatValue, shownMeanDifference} from "./indicators.mjs";
 
 const $ = id => document.getElementById(id);
 $("map-date-slot").append($("date-template").content.cloneNode(true));
@@ -8,18 +8,18 @@ const svg = (name, attrs = {}) => {
   return el;
 };
 const metrics = {
-  frost: {name:"Gelo recente", title:"Giorni con gelo",
+  frost: {name:"Giorni con gelo", title:"Giorni con gelo",
     copy:"Conta i giorni in cui la temperatura minima stimata è scesa a 0 °C o meno.",
     tip:"La temperatura al suolo può essere diversa da quella dell’aria.",
     unit:"gg", range:[0,30], stops:["#ecf3f9","#bfd9ed","#72acd4","#426cae","#2f386f"]},
   rain: {name:"Pioggia totale", title:"Pioggia totale",
     copy:"Pioggia totale stimata nel periodo.",
     tip:"Senza un riferimento storico non sappiamo se il totale è anomalo. Non è una misura della siccità.",
-    unit:"mm", range:[0,180], stops:["#955020","#d2924d","#f4e6b9","#75a9a1","#285b78"], reverse:true},
+    unit:"mm", range:[0,180], stops:["#f4f8fc","#c0def0","#75b6df","#3f83bf","#225285"]},
   storm: {name:"Picco pioggia · 24 h", title:"Massima pioggia in un giorno",
     copy:"Massima pioggia stimata in un giorno nel periodo selezionato.",
     tip:"I totali giornalieri non mostrano l’intensità dei temporali brevi.",
-    unit:"mm", range:[0,100], stops:["#eef4ee","#9fcacb","#559ba8","#536ca9","#3c3877"]},
+    unit:"mm", range:[0,100], stops:["#f4f8fc","#c0def0","#75b6df","#3f83bf","#225285"]},
   heat: {name:"Giorni caldi", title:"Giorni da 30 °C in su",
     copy:"Conta i giorni con massima stimata di almeno 30 °C.",
     tip:"Non indica la durata di un’ondata di caldo.",
@@ -35,6 +35,12 @@ const metrics = {
 };
 metrics.spring={...metrics.frost,name:"Gelo primaverile",title:"Giorni con gelo in primavera",
   copy:"Conta i giorni con minima stimata a 0 °C o meno, nella primavera in corso o nell’ultima conclusa."};
+Object.assign(metrics,{
+  min:{...metrics.mean,name:"Temperatura minima",title:"Temperatura minima",copy:"Minima stimata nel giorno indicato."},
+  max:{...metrics.mean,name:"Temperatura massima",title:"Temperatura massima",copy:"Massima stimata nel giorno indicato."},
+  rainDay:{...metrics.rain,name:"Pioggia del giorno",title:"Pioggia del giorno",
+    copy:"Pioggia totale stimata nel giorno indicato. Un millimetro equivale a un litro per metro quadrato.",range:[0,60]},
+});
 for (const [key,span] of Object.entries(peakDays).slice(1)) {
   metrics[key] = {...metrics.storm, name:"Picco pioggia · "+span*24+" h",
     title:"Massima pioggia in "+span+" giorni",
@@ -49,16 +55,17 @@ const cities = [["Trento",11.121,46.068],["Rovereto",11.041,45.890],["Riva del G
   ["Cavalese",11.461,46.290],["Canazei",11.774,46.476],["Borgo Valsugana",11.456,46.053],
   ["Fiera di Primiero",11.830,46.176],["Pinzolo",10.767,46.162]];
 const views = ["mappa","valli","metodo"];
-const metricOrder = ["frost","spring","mean","heat","rain","storm","storm48","storm72","gdd"];
+const dailyMetrics = ["min","max","rainDay"];
+const metricOrder = [...dailyMetrics,"mean","frost","spring","heat","rain","storm","storm48","storm72","gdd"];
 const province = {id:0,name:"Provincia di Trento"};
-const state = {mapMetric:"frost",compareMetric:"gdd",mapBand:"all",compareBand:"low",
+const state = {mapMetric:"min",compareMetric:"min",mapBand:"all",compareBand:"all",
   zone:0,comune:0,zoom:1,center:null,cell:null,station:null,dates:null,pairA:11,pairB:4,data:null,layers:new Map()};
 const frame = $("atlas-map");
-const it = new Intl.NumberFormat("it-IT",{maximumFractionDigits:1});
-const fmt = v => it.format(v);
+const fmt = v => formatValue.format(v);
 const pct = v => Math.round(v * 100) + "%";
-const value = (number, key) => fmt(number) + " " + (metrics[key].unit==="gg" ? "giorni" : metrics[key].unit);
+const value = (number, key) => fmt(number) + " " + (metrics[key].unit==="gg" ? (fmt(number)==="1" ? "giorno" : "giorni") : metrics[key].unit);
 const day = iso => new Intl.DateTimeFormat("it-IT",{day:"numeric",month:"short",year:"numeric",timeZone:"UTC"}).format(new Date(iso));
+const shortDay = iso => new Intl.DateTimeFormat("it-IT",{day:"numeric",month:"short",timeZone:"UTC"}).format(new Date(iso));
 const when = iso => new Intl.DateTimeFormat("it-IT",{dateStyle:"short",timeStyle:"short",timeZone:"Europe/Rome"}).format(new Date(iso));
 const activeView = () => {
   const view=location.hash.slice(1).split("?")[0];
@@ -68,6 +75,10 @@ function boundsFor(key) {
   const d = state.data;
   if (key === "gdd") return [d.seasonStart,d.seasonEnd];
   if (key === "spring") return [d.springStart,d.springEnd];
+  if (dailyMetrics.includes(key)) {
+    const end=state.dates?.[1] ?? d.latest;
+    return [end,end];
+  }
   if (state.dates) return state.dates;
   if (key === "heat") return [d.heatStart,d.heatEnd];
   return [key === "mean" ? d.latest : d.start,d.latest];
@@ -88,31 +99,41 @@ function mapHash(view=activeView(), overrides={}) {
   if (s.cell!==null) p.set("punto",s.cell);
   if (s.station) p.set("stazione",s.station.id);
   if (s.dates) { p.set("dal",s.dates[0]); p.set("al",s.dates[1]); }
-  if (s.stations ?? $("show-stations").checked) p.set("stazioni","1");
+  if (s.stations) p.set("stazioni","1");
   return "#"+view+"?"+p;
 }
 function syncUrl() {
   if (!state.data) return;
   history.replaceState(null,"",mapHash());
-  for (const anchor of document.querySelectorAll("a[data-view]")) anchor.href=mapHash(anchor.dataset.view);
+  for (const anchor of document.querySelectorAll("a[data-view]")) {
+    anchor.href=anchor.dataset.view==="valli" ? compareHash() : mapHash(anchor.dataset.view);
+  }
   for (const anchor of $("compare-rows").querySelectorAll("a[data-zone]")) {
     anchor.href=mapHash("mappa",{mapMetric:state.compareMetric,mapBand:state.compareBand,
       zone:Number(anchor.dataset.zone),comune:0,zoom:1.55,center:null,cell:null,station:null});
   }
-  $("map-compare").href=mapHash("valli",{compareMetric:state.mapMetric,compareBand:state.mapBand,pairA:state.zone||11});
+  $("map-compare").href=compareHash();
+}
+function compareHash() {
+  const a=state.zone||state.pairA;
+  return mapHash("valli",{compareMetric:state.mapMetric,compareBand:state.mapBand,pairA:a,pairB:a===state.pairB ? (a===11 ? 4 : 11) : state.pairB});
 }
 function restoreUrl() {
   const p=new URLSearchParams(location.hash.split("?")[1]), d=state.data;
   const pick=(object,key,fallback)=>Object.hasOwn(object,p.get(key)) ? p.get(key) : fallback;
-  state.mapMetric=pick(metrics,"m","frost");
-  state.compareMetric=pick(metrics,"c","gdd");
+  state.mapMetric=pick(d.layers,"m",d.layers.min ? "min" : "frost");
+  state.compareMetric=pick(d.layers,"c",state.mapMetric);
   state.mapBand=pick(bands,"b","all");
-  state.compareBand=pick(bands,"cb","low");
+  state.compareBand=pick(bands,"cb",state.mapBand);
   state.zone=Number(pick(state.zoneById,"z",0));
   state.pairA=Number(pick(state.zoneById,"a",11));
   state.pairB=Number(pick(state.zoneById,"p",4));
   state.comune=Number(pick(state.comuneById,"comune",0));
-  state.zoom=Math.min(12,Math.max(1,Number(p.get("zoom"))||1));
+  if (!location.hash && state.comuneById[savedComune()]) {
+    state.comune=savedComune();
+    state.zone=zoneForComune(state.comune);
+  }
+  state.zoom=Math.min(12,Math.max(1,Number(p.get("zoom"))||(state.comune ? 4.2 : 1)));
   const center=p.get("centro")?.split(",").map(Number);
   state.center=center?.length===2 && center.every(Number.isFinite) ? center : null;
   const cell=p.get("punto");
@@ -124,7 +145,7 @@ function restoreUrl() {
   const dates=requested && from>=d.daily.start && to<=d.latest ? [from,to] : null;
   state.dates=state.daily ? dates : null;
   $("date-status").textContent=requested && !dates ? "Il periodo del link non è più disponibile. Mostro il periodo predefinito." : "";
-  $("show-stations").checked=p.get("stazioni")==="1";
+  state.stations=p.get("stazioni")==="1";
   return dates;
 }
 function layerFor(key) {
@@ -132,7 +153,7 @@ function layerFor(key) {
   const precomputed=key==="gdd" || key==="spring" || !state.dates;
   const id=[key,from,to,precomputed].join("/");
   if (state.layers.has(id)) return state.layers.get(id);
-  const field=key==="frost" ? "min" : key==="heat" ? "max" : key==="mean" ? "mean" : "rain";
+  const field=key==="frost" || key==="min" ? "min" : key==="heat" || key==="max" ? "max" : key==="mean" ? "mean" : "rain";
   const size=state.elevation.length;
   const packed=d.layers[key];
   const layer=precomputed ? {
@@ -191,6 +212,19 @@ function setAreaOpen(open,focus=false) {
   $("show-area").setAttribute("aria-expanded",String(open));
   if (open && focus) $("close-area").focus();
 }
+const areaKey=()=>[state.comune,state.zone,state.cell,state.station?.id].join("/");
+function closeArea(focus=false) {
+  state.closedArea=areaKey();
+  setAreaOpen(false);
+  if (focus) $("show-area").focus();
+}
+function frostNote() {
+  const p=el("p","Stima storica, non una previsione. ","stat-meta local-history");
+  const link=el("a","Previsioni Meteotrentino","inline-link");
+  link.href="https://www.meteotrentino.it/previsioni/";
+  p.append(link);
+  return p;
+}
 function readPoint() {
   const box=$("point-read"), i=state.cell, station=state.station;
   box.hidden=i===null && !station;
@@ -209,15 +243,18 @@ function readPoint() {
   const [lo,hi]=bandBounds[state.mapBand];
   const z=state.elevation[i];
   const metric=state.mapMetric, layer=layerFor(metric), raw=layer.values[i], peak=peakText(metric,layer.peaks?.[i]);
-  box.replaceChildren(el("div","Punto sulla mappa · "+fmt(z)+" m","stat-tag"),el("strong",
-    z<lo || z>=hi ? "Punto fuori dalla fascia di quota" : Number.isFinite(raw) ? "Stima: "+value(raw,metric) : "Stima non disponibile"));
+  const available=z>=lo && z<hi && Number.isFinite(raw);
+  box.replaceChildren(el("div","Stima nel punto · "+fmt(z)+" m","stat-tag"),
+    el("div",available ? value(raw,metric) : z<lo || z>=hi ? "Fuori fascia di quota" : "Stima non disponibile",
+      available ? "stat-big" : "stat-meta"),el("div",period(metric),"stat-meta"));
   if (peak && z>=lo && z<hi) box.append(el("div","Picco: "+peak));
+  if (metric==="frost" || metric==="spring") box.append(frostNote());
 }
 function inspectPoint(point,station=null,focus=false) {
   const {w,h}=state.data.grid, [x,y]=point.map(Math.floor);
   const i=x>=0 && y>=0 && x<w && y<h ? y*w+x : -1;
   const zone=state.zoneArray[i];
-  if (!station && !(zone>0)) return;
+  if (!station && !(zone>0)) {if (!$("area-panel").hidden) closeArea(); return;}
   state.center=state.camera;
   if (zone>0 || station.comune) {
     state.zone=zone>0 ? zone : 0;
@@ -225,6 +262,7 @@ function inspectPoint(point,station=null,focus=false) {
   }
   state.cell=station ? null : i;
   state.station=station;
+  state.closedArea=null;
   $("map-zone").value=state.comune ? "" : String(state.zone);
   $("comune-search").value=state.comune ? selectedArea().name : "";
   drawSelection(); readZone(); readPoint(); syncUrl();
@@ -238,7 +276,12 @@ function drawBase() {
   state.names=svg("g",{"aria-hidden":"true"});
   state.stationLayer=svg("g",{"aria-label":"Stazioni con misure nell’ultimo giorno"});
   state.pin=svg("circle",{class:"map-pin",visibility:"hidden","aria-hidden":"true"});
-  frame.append(state.raster,state.shapes,state.names,state.stationLayer,state.pin);
+  const base=svg("image",{x:-85/3,y:-100/3,width:726/3,height:675/3,
+    "aria-hidden":"true","pointer-events":"none"});
+  state.basemap ??= fetchGzip("basemap.svg.gz","default").then(response=>response.text())
+    .then(text=>"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(text)).catch(()=>null);
+  state.basemap.then(src=>{if (src) base.setAttribute("href",src);});
+  frame.append(base,state.raster,state.shapes,state.names,state.stationLayer,state.pin);
 
   let minX=w,minY=h,maxX=0,maxY=0;
   for (let i=0;i<state.elevation.length;i++) if (state.elevation[i]!==-32768) {
@@ -289,7 +332,12 @@ function drawSelection() {
 }
 function toggleStations() {
   if (!state.stationLayer) return;
-  state.stationLayer.style.display=$("show-stations").checked ? "" : "none";
+  const visible=!!state.stations;
+  $("stations-toggle").setAttribute("aria-pressed",String(visible));
+  $("stations-toggle").setAttribute("aria-label",visible ? "Nascondi stazioni" : "Mostra stazioni");
+  $("stations-toggle").title=$("stations-toggle").getAttribute("aria-label");
+  state.stationLayer.style.display=visible ? "" : "none";
+  state.stationLayer.setAttribute("aria-hidden",String(!visible));
   const [lo,hi]=bandBounds[state.mapBand];
   for (const dot of state.stationLayer.children) dot.style.display=dot.dataset.elevation>=lo && dot.dataset.elevation<hi ? "" : "none";
 }
@@ -298,7 +346,8 @@ function viewport() {
   const rect=frame.getBoundingClientRect();
   const [, ,w,h]=state.bounds;
   const width=Math.max(1,rect.width), height=Math.max(1,rect.height);
-  const scale=Math.max(w/Math.max(1,width-24),h/Math.max(1,height-Math.min(160,height*.25)))/state.zoom;
+  const mobile=width<=640;
+  const scale=Math.max(w/Math.max(1,width-(mobile ? 2 : 24)),h/Math.max(1,height-Math.min(160,height*.25)))/state.zoom;
   return {rect,width:width*scale,height:height*scale,scale};
 }
 function updateZoom() {
@@ -320,13 +369,15 @@ function updateZoom() {
     label.setAttribute("dx",5*scale);
     label.setAttribute("dy",3*scale);
   }
-  const visibleBoxes=[];
+  const visibleBoxes=[], left=state.camera[0]-width/2, top=state.camera[1]-height/2;
   for (const label of state.names.querySelectorAll("text")) {
     label.style.fontSize=(label.classList.contains("context-label") ? 10 : narrow ? 10 : 12)*scale+"px";
     label.style.strokeWidth=3*scale+"px";
     if (label.parentNode.style.display==="none") continue;
     const {x,y,width,height}=label.getBBox(), gap=3*scale;
-    const overlaps=visibleBoxes.some(b=>x<b.x+b.width+gap && x+width+gap>b.x && y<b.y+b.height+gap && y+height+gap>b.y);
+    const overlaps=x<left+gap || x+width>left+frame.clientWidth*scale-gap ||
+      y<top+gap || y+height>top+frame.clientHeight*scale-gap ||
+      visibleBoxes.some(b=>x<b.x+b.width+gap && x+width+gap>b.x && y<b.y+b.height+gap && y+height+gap>b.y);
     label.setAttribute("visibility",overlaps ? "hidden" : "visible");
     if (!overlaps) visibleBoxes.push({x,y,width,height});
   }
@@ -348,16 +399,12 @@ function renderRaster() {
   const ctx=canvas.getContext("2d"), img=ctx.createImageData(w,h);
   const m=metrics[state.mapMetric], [low,high]=metricRange(state.mapMetric), [bandLo,bandHi]=bandBounds[state.mapBand];
   const colors=m.stops.map(c => [1,3,5].map(j => parseInt(c.slice(j,j+2),16)));
-  const at=(i, fallback) => z[i]!==undefined && z[i]!==-32768 ? z[i] : fallback;
   for (let i=0;i<z.length;i++) {
     if (z[i]===-32768 || state.zoneArray[i]<=0) continue;
-    const iy=Math.floor(i/w), ix=i%w, val=values[i], outside=z[i]<bandLo || z[i]>=bandHi;
-    const slope=at(i+1,z[i])-at(i-1,z[i])+at(i+w,z[i])-at(i-w,z[i]);
-    const shade=outside || !Number.isFinite(val) ? Math.max(-12,Math.min(12,slope*.045)) : 0;
-    const rgb=outside ? (ix%3===0 && iy%3===0 ? [105,113,122] : [213,221,229]) : !Number.isFinite(val) ?
-      ((ix+iy)%5<2 ? [117,126,118] : [232,235,222]) : gradient(colors,low,high,val);
-    for (let j=0;j<3;j++) img.data[4*i+j]=rgb[j]+(outside ? shade*.3 : shade);
-    img.data[4*i+3]=255;
+    const val=values[i], outside=z[i]<bandLo || z[i]>=bandHi;
+    const rgb=outside ? [119,133,144] : !Number.isFinite(val) ? [239,237,223] : gradient(colors,low,high,val);
+    for (let j=0;j<3;j++) img.data[4*i+j]=rgb[j];
+    img.data[4*i+3]=outside ? 47 : !Number.isFinite(val) ? 35 : 204;
   }
   ctx.putImageData(img,0,0);
   state.raster.setAttribute("href",canvas.toDataURL());
@@ -365,8 +412,8 @@ function renderRaster() {
 function legend() {
   const m=metrics[state.mapMetric], [lo,hi]=metricRange(state.mapMetric);
   const labels=el("div",null,"legend-text");
-  labels.append(el("span","Nessuna stima","no-data"));
-  if (state.mapBand!=="all") labels.append(el("span","Fuori fascia","out-band"));
+  labels.append(el("span","Zone senza stima","no-data"));
+  if (state.mapBand!=="all") labels.append(el("span",bands[state.mapBand],"out-band"));
   const ramp=el("div",null,"legend-ramp");
   ramp.style.background="linear-gradient(90deg,"+m.stops.join(",")+")";
   const scale=el("div",null,"legend-scale");
@@ -386,37 +433,86 @@ function readZone() {
   const box=$("zone-read");
   $("area-name").textContent=selectedArea().name;
   readLocalStation();
+  readDailySummary();
   $("csv").disabled=!stats;
   if (!stats) {
     box.replaceChildren(el("p",cells ? "Nessuna stima per questa fascia e questo periodo." :
       "Non ci sono celle nella fascia di quota selezionata.","stat-meta"));
     return;
   }
-  box.replaceChildren(el("div","Media delle celle con stima","stat-tag"),el("div",value(stats.mean,key),"stat-big"),
-    el("div","Da "+fmt(stats.min)+" a "+value(stats.max,key)+" · Celle con stima: "+pct(stats.coverage),"stat-meta"));
+  const label=state.comune ? "Media stimata nel comune" : state.zone ? "Media stimata nella valle" : "Media stimata in Trentino";
+  const hasPoint=state.cell!==null || !!state.station;
+  box.replaceChildren(el("div",metrics[key].title+" · "+label,"stat-tag"),
+    el("div",value(stats.mean,key),hasPoint ? "stat-secondary" : "stat-big"),
+    el("div",period(key)+" · Min "+fmt(stats.min)+" / max "+value(stats.max,key),"stat-meta"));
   const peak=peakText(key,stats.peak);
   if (peak) box.append(el("p","Picco locale: "+value(stats.max,key)+" · "+peak,"stat-meta"));
+  if (!hasPoint && (key==="frost" || key==="spring")) box.append(frostNote());
+  if (stats.coverage<.95) box.append(el("p","Stima disponibile per il "+pct(stats.coverage)+" dell’area selezionata.","stat-meta"));
 }
 function readLocalStation() {
   const box=$("local-station");
-  box.hidden=!!state.station || !state.comune || !state.data.stations.length;
-  if (box.hidden) return;
-  const [lon,lat]=selectedArea().center;
+  box.hidden=true;
+  const [from,to]=boundsFor(state.mapMetric);
+  if (state.station || !state.comune || from!==to || to!==state.data.latest) return;
+  const {w,west,north,dx,dy}=state.data.grid;
+  const [x,y]=state.cell===null ? project(...selectedArea().center) : [state.cell%w+.5,Math.floor(state.cell/w)+.5];
+  const i=state.cell ?? Math.floor(y)*w+Math.floor(x), z=state.elevation[i];
+  if (!Number.isFinite(z) || z===-32768) return;
+  const lon=west+x*dx, lat=north-y*dy;
   const km=s=>111.195*Math.hypot((s.lon-lon)*Math.cos(lat*Math.PI/180),s.lat-lat);
+  const [lo,hi]=bandBounds[state.mapBand];
   const stations=state.data.stations.map(s=>({s,km:km(s),local:s.comune===state.comune}))
-    .sort((a,b)=>b.local-a.local || a.km-b.km);
-  const [station]=stations, [lo,hi]=bandBounds[state.mapBand];
+    .filter(({s,km})=>km<=15 && Math.abs(s.z-z)<=300 && s.z>=lo && s.z<hi)
+    .sort((a,b)=>a.km-b.km);
+  const [station]=stations;
+  if (!station) return;
   const {s}=station;
-  const context=station.local ? "Stazione nel comune" :
-    "Nessuna misura di stazione nel comune: la più vicina dista circa "+fmt(station.km)+" km dal punto di riferimento della mappa";
+  box.hidden=false;
+  const context=(station.local ? "Nel comune · " : "")+fmt(station.km)+" km dal punto di riferimento · "+
+    fmt(Math.abs(s.z-z))+" m di dislivello";
   box.replaceChildren(el("strong","Misure di stazione · "+day(state.data.latest)),
-    el("span",s.name+" · "+fmt(s.z)+" m"+(s.z<lo || s.z>=hi ? " · Fuori dalla fascia della mappa" : "")),
-    el("span",stationDescription(s)),el("small",context+" · Dati anche provvisori"));
+    el("span",s.name+" · "+fmt(s.z)+" m"),
+    el("span",stationDescription(s)),el("small",context));
 }
+function savedComune() {
+  try {return Number(localStorage.getItem("atlante-comune")) || 0;} catch {return 0;}
+}
+const dailyLabels=["Minima","Massima","Pioggia"];
+function readDailySummary() {
+  const section=$("daily-summary"), rows=state.data.comuneTrends?.[state.comune], saved=state.comune===savedComune();
+  section.hidden=!rows;
+  if (!rows) return;
+  $("save-comune").textContent=saved ? "Rimuovi dai salvati" : "Salva per le prossime visite";
+  $("save-comune").setAttribute("aria-pressed",String(saved));
+  $("daily-heading").textContent="Ultimo giorno · "+shortDay(state.data.latest);
+  $("daily-values").replaceChildren(...rows.at(-1).map((reading,i)=>{
+    const item=el("div");
+    item.append(el("span",dailyLabels[i],"stat-tag"),
+      el("strong",reading===null ? "—" : value(reading,dailyMetrics[i])));
+    return item;
+  }));
+  const table=el("tbody");
+  rows.forEach((row,index)=>{
+    const tr=el("tr"), date=el("th",shortDay(addDays(state.data.latest,index-rows.length+1)));
+    date.scope="row";
+    tr.append(date,...row.map((reading,i)=>el("td",reading===null ? "—" : value(reading,dailyMetrics[i]))));
+    table.append(tr);
+  });
+  $("daily-table").querySelector("tbody").replaceWith(table);
+}
+$("save-comune").addEventListener("click",()=>{
+  try {
+    if (state.comune===savedComune()) localStorage.removeItem("atlante-comune");
+    else localStorage.setItem("atlante-comune",state.comune);
+    readDailySummary();
+  } catch { $("daily-status").textContent="Il browser non consente di salvare il comune."; }
+});
 function chooseArea(zone,comune,{recenter=true,focus=false}={}) {
   state.zone=zone;
   state.comune=comune;
   state.cell=state.station=null;
+  state.closedArea=null;
   if (recenter) {
     state.center=null;
     state.zoom=comune ? 4.2 : zone ? 2.4 : 1;
@@ -428,31 +524,56 @@ function chooseArea(zone,comune,{recenter=true,focus=false}={}) {
   drawSelection(); readZone(); readPoint(); syncUrl();
   setAreaOpen(!!(zone||comune),focus);
 }
+let datesEdited=false;
 function renderDates() {
   const key=activeView()==="valli" ? state.compareMetric : state.mapMetric;
   const fixed=key==="gdd" || key==="spring";
   const [from,to]=boundsFor(key), seasonal=fixed || (key==="heat" && !state.dates);
-  for (const id of ["date-start","date-end"]) {
-    $(id).min=state.data.daily.start;
-    $(id).max=state.data.latest;
-    $(id).disabled=fixed;
+  const daily=dailyMetrics.includes(key);
+  $("date-start").disabled=fixed || daily;
+  $("date-end").disabled=fixed;
+  $("date-start").closest("label").hidden=daily;
+  if (!datesEdited) {
+    const available=to>=state.data.daily.start && from<=state.data.latest && !fixed;
+    $("date-start").value=available && from>=state.data.daily.start ? from : state.data.daily.start;
+    $("date-end").value=available && to<=state.data.latest ? to : state.data.latest;
   }
-  $("date-start").value=from>=state.data.daily.start && !fixed ? from : "";
-  $("date-end").value=to<=state.data.latest && !fixed && $("date-start").value ? to : "";
   $("date-controls").querySelector(".fields").hidden=fixed;
-  $("date-controls").querySelector(".action-row").hidden=fixed;
-  $("date-reset").disabled=!state.dates || fixed;
-  $("date-controls").querySelector('[type="submit"]').disabled=fixed;
+  $("date-controls").querySelector('[type="submit"]').hidden=fixed || activeView()!=="valli";
+  $("date-presets").hidden=fixed || daily;
+  $("date-reset").hidden=!state.dates || fixed;
   const span=peakDays[key];
   $("date-hint").textContent=fixed ? period(key)+" · periodo stagionale" :
     span && dayIndex(to,from)+1<span ? "Seleziona almeno "+span+" giorni per questo indicatore." :
     seasonal ? period(key)+" · oppure scegli date negli ultimi 90 giorni." :
     "Date disponibili: "+day(state.data.daily.start)+" – "+day(state.data.latest)+".";
 }
+function periodWarning(key) {
+  const span=peakDays[key], [from,to]=boundsFor(key);
+  return span && dayIndex(to,from)+1<span ? "Per questo indicatore servono almeno "+span+" giorni consecutivi." : "";
+}
+function renderFilters() {
+  const filters=[];
+  if (state.mapBand!=="all") filters.push([bands[state.mapBand],()=>{state.mapBand="all";renderMap();}]);
+  if (state.zone && !state.comune) filters.push([selectedArea().name,()=>chooseArea(0,0)]);
+  if (state.dates && !["gdd","spring"].includes(state.mapMetric)) {
+    const [from,to]=boundsFor(state.mapMetric);
+    filters.push([from===to ? shortDay(to) : shortDay(from)+" – "+shortDay(to),()=>{state.dates=null;applyDateView();}]);
+  }
+  $("filter-count").textContent=filters.length;
+  $("filter-count").hidden=!filters.length;
+  $("active-filters").hidden=!filters.length;
+  $("active-filters").replaceChildren(...filters.map(([label,reset])=>{
+    const btn=el("button",label+" ×","active-chip");
+    btn.type="button"; btn.setAttribute("aria-label","Rimuovi filtro: "+label);
+    btn.addEventListener("click",()=>{reset();document.querySelector('[data-open="filters"]').focus();});
+    return btn;
+  }));
+}
 function renderMap() {
-  $("metrics").value=state.mapMetric;
   if (!state.data) return;
   const key=state.mapMetric, m=metrics[key];
+  for (const button of document.querySelectorAll("[data-metric]")) button.setAttribute("aria-pressed",String(button.dataset.metric===key));
   $("map-band").value=state.mapBand;
   $("map-zone").value=state.comune ? "" : String(state.zone);
   $("comune-search").value=state.comune ? selectedArea().name : "";
@@ -460,10 +581,13 @@ function renderMap() {
   $("indicator-title").textContent=m.title;
   $("metric-copy").textContent=m.copy;
   $("metric-tip").textContent=m.tip;
-  $("period").textContent=period(key);
-  const filters=Number(state.mapBand!=="all")+Number(!!state.dates && key!=="gdd" && key!=="spring")+Number($("show-stations").checked)+Number(!!state.zone && !state.comune);
-  $("filter-count").textContent=filters;
-  $("filter-count").hidden=!filters;
+  const [from,to]=boundsFor(key);
+  const seasonal=["spring","gdd"].includes(key) || (key==="heat" && !state.dates);
+  $("period").textContent=(from===to && to===state.data.latest ? "Ultimo giorno osservato: " : seasonal ? "Periodo stagionale: " : "")+period(key);
+  const warning=periodWarning(key);
+  $("period-warning").hidden=!warning;
+  $("period-warning").textContent=warning;
+  renderFilters();
   drawSelection(); renderRaster(); legend(); readZone(); readPoint(); renderDates(); toggleStations(); syncUrl();
 }
 function compare() {
@@ -471,7 +595,7 @@ function compare() {
   $("compare-metrics").value=key;
   if (!state.data) return;
   $("compare-band").value=band;
-  $("compare-period").textContent=period(key);
+  $("compare-period").textContent=period(key)+(periodWarning(key) ? " · "+periodWarning(key) : "");
   $("sort-label").textContent=m.reverse ? "Media ↑" : "Media ↓";
   const score=s=>s?.coverage>=.6 ? 2 : s ? 1 : 0;
   const zones=state.data.zones.map(z=>[z,areaReading(z.id,band,key)]).map(([z,r])=>[z,r.stats,r.cells]).sort(([a,s],[b,t]) =>
@@ -522,21 +646,30 @@ function renderPair() {
   $("pair-values").replaceChildren(...(same ? [] : rows.map(([z,s])=>{
     const card=el("div",null,"pair-stat");
     card.append(el("b",z.name),el("strong",s ? value(s.mean,key) : "Nessuna stima"));
-    if (s) card.append(el("span",pct(s.coverage)+" delle celle"),el("small","Quota media "+fmt(s.zMean)+" m · "+fmt(s.zMin)+"–"+fmt(s.zMax)+" m"));
+    if (s) card.append(el("span","Media stimata"+(s.coverage<.95 ? " · "+pct(s.coverage)+" del territorio in fascia" : "")),
+      el("small","Quota media "+fmt(s.zMean)+" m · "+fmt(s.zMin)+"–"+fmt(s.zMax)+" m"));
     return card;
   })));
-  $("pair-elevation").textContent=same ? "Scegli due valli diverse." : "";
+  const [[a,left],[b,right]]=rows, diff=left && right ? shownMeanDifference(left.mean,right.mean) : 0;
+  $("pair-elevation").textContent=same ? "Scegli due valli diverse." :
+    periodWarning(key) || (!left || !right ? (band!=="all" ? "Nessuna stima per almeno una valle in questa fascia. Prova tutte le quote." :
+      "Nessuna stima per almeno una valle nel periodo selezionato.") :
+    diff===0 ? "Medie uguali alla precisione mostrata." :
+    "Scarto tra le medie: "+value(Math.abs(diff),key)+" in più per "+(diff>0 ? a.name : b.name)+".");
   $("pair-copy").disabled=same; $("pair-csv").disabled=same;
   $("pair-status").textContent="";
 }
 function showRoute() {
+  datesEdited=false;
   const which=activeView();
   $(which==="valli" ? "compare-date-slot" : "map-date-slot").append($("date-controls"));
   $("date-controls").hidden=!state.data;
   for (const dialog of document.querySelectorAll("dialog[open]")) {
     if (dialog.id!==which) dialog.close();
   }
-  if (which!=="mappa" && !$(which).open) $(which).showModal();
+  if (which!=="mappa" && !$(which).open) {
+    if (which==="valli") $(which).show(); else $(which).showModal();
+  }
   updateZoom(); renderMap();
   if (which==="valli") compare();
 }
@@ -569,7 +702,7 @@ async function openSharedRoute() {
     }
   }
   showRoute();
-  setAreaOpen(!!(state.comune || state.zone || state.station || state.cell!==null));
+  setAreaOpen(!!(state.comune || state.zone || state.station || state.cell!==null) && state.closedArea!==areaKey());
 }
 async function populate(d) {
   state.data=d;
@@ -580,15 +713,22 @@ async function populate(d) {
   state.comuneArray=decode(d.comuneGrid);
   state.zoneById=Object.fromEntries(d.zones.map(z=>[z.id,z]));
   state.comuneById=Object.fromEntries(d.comuni.map(z=>[z.id,z]));
+  for (const button of document.querySelectorAll("[data-metric]")) button.hidden=!d.layers[button.dataset.metric];
+  document.querySelector(".daily-switch").hidden=dailyMetrics.every(key=>!d.layers[key]);
+  for (const opt of $("compare-metrics").options) opt.hidden=opt.disabled=!d.layers[opt.value];
   for (const id of ["map-zone","pair-a","pair-b"]) {
     $(id).replaceChildren();
     if (id==="map-zone") {
-      const placeholder=new Option("Torna a una valle","");
+      const placeholder=new Option("Comune selezionato","");
       placeholder.disabled=true;
       $(id).add(placeholder);
       option($(id),0,"Tutto il Trentino");
     }
     for (const z of [...d.zones].sort((a,b)=>a.name.localeCompare(b.name,"it"))) option($(id),z.id,z.name);
+  }
+  for (const id of ["date-start","date-end"]) {
+    $(id).replaceChildren();
+    for (let date=d.latest;date>=d.daily.start;date=addDays(date,-1)) option($(id),date,day(date));
   }
   d.comuni.sort((a,b)=>a.name.localeCompare(b.name,"it"));
   $("latest").textContent=day(d.latest);
@@ -640,15 +780,17 @@ function comuneMatches() {
   const rank=name=>name===query ? 0 : name.startsWith(query) ? 1 : 2;
   return matches.sort((a,b)=>rank(a[1])-rank(b[1])).slice(0,8).map(([area])=>area);
 }
-function openComune(area) {
+function zoneForComune(id) {
   const {w,h}=state.data.grid;
   const counts=new Map();
-  for (let i=0;i<w*h;i++) if (state.comuneArray[i]===area.id && state.zoneArray[i]>0) {
+  for (let i=0;i<w*h;i++) if (state.comuneArray[i]===id && state.zoneArray[i]>0) {
     const z=state.zoneArray[i];
     counts.set(z,(counts.get(z)??0)+1);
   }
-  const zone=[...counts].sort((a,b)=>b[1]-a[1])[0]?.[0] ?? state.zone;
-  chooseArea(zone,area.id,{focus:true});
+  return [...counts].sort((a,b)=>b[1]-a[1])[0]?.[0] ?? 0;
+}
+function openComune(area) {
+  chooseArea(zoneForComune(area.id),area.id,{focus:true});
 }
 function download(blob, name) {
   const link=el("a");
@@ -676,6 +818,7 @@ function exportCsv(rows, key, band, level) {
   download(new Blob(["\ufeff",data,"\r\n"],{type:"text/csv;charset=utf-8"}),"atlante-"+key+"-"+to+".csv");
 }
 async function exportPng() {
+  await state.basemap;
   const key=state.mapMetric, clone=frame.cloneNode(true), width=1200,height=940;
   clone.setAttribute("width",width); clone.setAttribute("height",height-176);
   clone.querySelectorAll(".zone-shape").forEach(p=>{
@@ -702,8 +845,8 @@ async function exportPng() {
   ctx.fillStyle="#203a31"; ctx.font="17px sans-serif";
   ctx.fillText(value(low,key),32,897);
   ctx.textAlign="right"; ctx.fillText(value(high,key),432,897); ctx.textAlign="left";
-  ctx.fillText("Tratteggio: nessuna stima"+(state.mapBand==="all" ? "" : " · Puntinato: fuori fascia"),468,876);
-  ctx.fillText("Dati: Meteotrentino, CC BY 4.0 · Rilievo: TINITALY, INGV · Confini: Provincia autonoma di Trento · Stime, non allerte.",32,924);
+  ctx.fillText("Senza colore: nessuna stima"+(state.mapBand==="all" ? "" : " · Grigio: fuori fascia"),468,876);
+  ctx.fillText("Meteotrentino · TINITALY (INGV) · Provincia autonoma di Trento · © OpenStreetMap / OpenMapTiles · Non è una previsione",32,924);
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));
   if (!blob) throw new Error("Immagine non disponibile");
   download(blob,"atlante-"+key+"-"+boundsFor(key)[1]+".png");
@@ -715,12 +858,36 @@ function shareUrl(view,key) {
   return url.href;
 }
 function applyDateView() {
+  datesEdited=false;
   $("date-status").textContent="";
-  if (activeView()==="valli") compare(); else renderMap();
+  renderMap();
+  if (activeView()==="valli") compare();
 }
 
-createMetricControls($("metrics"),"mapMetric",renderMap);
-createMetricControls($("compare-metrics"),"compareMetric",compare);
+const metricGroups={
+  "Temperatura":["min","max","mean","frost","spring","heat"],
+  "Pioggia":["rainDay","rain","storm","storm48","storm72"],
+  "Colture":["gdd"],
+};
+for (const [label,keys] of Object.entries(metricGroups)) {
+  const group=el("section",null,"metric-group");
+  group.append(el("h3",label));
+  for (const key of keys) {
+    const button=el("button",null,"metric-option");
+    button.type="button";
+    button.dataset.metric=key;
+    button.append(el("strong",metrics[key].title),el("span",metrics[key].copy));
+    group.append(button);
+  }
+  $("metric-options").append(group);
+}
+for (const button of document.querySelectorAll("[data-metric]")) button.addEventListener("click",()=>{
+  if (!state.data) return;
+  if ($("metric-picker").open) closeSheet($("metric-picker"));
+  state.mapMetric=button.dataset.metric;
+  renderMap();
+});
+createMetricControls($("compare-metrics"),"compareMetric",()=>{datesEdited=false;compare();});
 for (const [k,label] of Object.entries(bands)) {
   option($("map-band"),k,label); option($("compare-band"),k,label);
 }
@@ -761,38 +928,98 @@ $("comune-form").addEventListener("submit",event=>{
   const [area]=comuneMatches();
   if (area) openComune(area);
 });
-$("date-controls").addEventListener("submit",async event=>{
-  event.preventDefault();
-  const a=$("date-start").value,b=$("date-end").value;
+async function submitDates(close=false) {
+  if (!state.data) return;
+  const key=activeView()==="valli" ? state.compareMetric : state.mapMetric;
+  const b=$("date-end").value, a=dailyMetrics.includes(key) ? b : $("date-start").value;
+  if ((close && !datesEdited) || ["spring","gdd"].includes(key) || (a===boundsFor(key)[0] && b===boundsFor(key)[1])) {
+    if (close) closeSheet($("filters"));
+    return;
+  }
   if (a>b) { $("date-status").textContent="La data iniziale deve precedere o coincidere con quella finale."; return; }
+  const span=peakDays[key];
+  if (span && dayIndex(b,a)+1<span) { $("date-status").textContent="Scegli almeno "+span+" giorni consecutivi."; return; }
   const before=location.hash;
   if (!state.daily) {
     $("date-status").textContent="Caricamento delle serie giornaliere…";
     try { await loadHistory(); }
     catch { $("date-status").textContent="Serie giornaliere non disponibili. Riprova."; return; }
-    if (location.hash!==before || $("date-start").value!==a || $("date-end").value!==b) return;
+    if (location.hash!==before || (!dailyMetrics.includes(key) && $("date-start").value!==a) || $("date-end").value!==b ||
+        !(close ? $("filters") : $("valli")).open) return;
   }
   state.dates=[a,b]; applyDateView();
+  if (close) closeSheet($("filters"));
+}
+$("date-controls").addEventListener("submit",event=>{
+  event.preventDefault();
+  submitDates($("filters").open);
 });
 $("date-reset").addEventListener("click",()=>{state.dates=null;applyDateView();});
-$("show-stations").addEventListener("change",renderMap);
+for (const id of ["date-start","date-end"]) $(id).addEventListener("change",()=>{datesEdited=true;});
+for (const button of $("date-presets").children) button.addEventListener("click",()=>{
+  $("date-end").value=state.data.latest;
+  $("date-start").value=addDays(state.data.latest,1-Number(button.dataset.days));
+  datesEdited=true;
+  $("date-status").textContent="";
+});
+$("stations-toggle").addEventListener("click",()=>{state.stations=!state.stations;renderMap();});
+const openers=new WeakMap();
 for (const button of document.querySelectorAll("[data-open]")) {
-  button.addEventListener("click",()=>$(button.dataset.open).showModal());
+  button.addEventListener("click",()=>{
+    const target=$(button.dataset.open);
+    if (target.open) {closeSheet(target);return;}
+    for (const other of document.querySelectorAll("dialog[open]")) closeSheet(other,false);
+    openers.set(target,button);
+    if (target.matches(".dock")) {
+      if (target.id==="share" || target.id==="metric-picker") {
+        target.style.setProperty("--panel-left",button.getBoundingClientRect().left+"px");
+      }
+      target.show();
+    } else target.showModal();
+  });
 }
-function closeSheet(dialog) {
+for (const anchor of document.querySelectorAll('a[data-view="valli"],a[data-view="metodo"],#map-compare')) {
+  anchor.addEventListener("click",()=>{
+    openers.set($(anchor=== $("map-compare") ? "valli" : anchor.dataset.view),anchor);
+  });
+}
+function closeSheet(dialog,focus=true) {
   dialog.close();
+  if (dialog.id==="filters" || dialog.id==="valli") {
+    datesEdited=false;
+    if (state.data) renderDates();
+    $("date-status").textContent="";
+  }
   if (dialog.id==="valli" || dialog.id==="metodo") {
     history.replaceState(null,"",mapHash("mappa"));
     showRoute();
   }
+  if (focus) (openers.get(dialog) ?? (dialog.id==="valli" ? $("link-valli") : $("link-metodo"))).focus();
 }
 for (const dialog of document.querySelectorAll("dialog")) {
   dialog.querySelector("[data-close]").addEventListener("click",()=>closeSheet(dialog));
   dialog.addEventListener("cancel",event=>{event.preventDefault();closeSheet(dialog);});
+  dialog.addEventListener("click",event=>{
+    if (event.target!==dialog || dialog.matches(".dock")) return;
+    const r=dialog.getBoundingClientRect();
+    if (event.clientX<r.left || event.clientX>r.right || event.clientY<r.top || event.clientY>r.bottom) closeSheet(dialog);
+  });
 }
-$("show-map").addEventListener("click",()=>closeSheet($("filters")));
-$("show-area").addEventListener("click",()=>setAreaOpen($("area-panel").hidden,true));
-$("close-area").addEventListener("click",()=>{setAreaOpen(false);$("show-area").focus();});
+document.addEventListener("click",event=>{
+  const target=document.querySelector("dialog.dock[open]");
+  if (target && !target.contains(event.target) && !event.target.closest("[data-open],a[data-view],#map-compare")) closeSheet(target,false);
+});
+document.addEventListener("keydown",event=>{
+  if (event.key!=="Escape" || event.defaultPrevented) return;
+  const target=document.querySelector("dialog[open]");
+  if (target?.matches(".dock")) {event.preventDefault();closeSheet(target);}
+  if (!target && !$("area-panel").hidden) {event.preventDefault();closeArea(true);}
+});
+$("show-area").addEventListener("click",()=>{
+  if ($("area-panel").hidden) {state.closedArea=null;setAreaOpen(true,true);}
+  else closeArea(true);
+});
+$("close-area").addEventListener("click",()=>closeArea(true));
 $("copy-link").addEventListener("click",async()=>{
   if (!state.data) return;
   const url=shareUrl("mappa",state.mapMetric);

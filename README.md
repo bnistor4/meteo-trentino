@@ -1,6 +1,6 @@
 # Atlante Meteo Trentino
 
-Atlante indipendente in italiano. Sposta e ingrandisci la mappa, cerca un comune o seleziona un punto per leggere la stima. I pannelli raccolgono filtri, confronti tra valli, fonti ed esportazioni. Le stime riguardano condizioni passate, non sono allerte e non misurano il clima o la resa agricola.
+Atlante indipendente in italiano. La mappa apre sull’ultimo giorno osservato, con accesso a minime, massime e pioggia. Cerca un comune per vedere le medie stimate degli ultimi sette giorni e salvarlo nel browser. I pannelli raccolgono filtri, confronti tra valli, fonti ed esportazioni. L’Atlante non fornisce previsioni o allerte e non misura il clima o la resa agricola.
 
 ## Avvio
 
@@ -29,8 +29,18 @@ Per provare modifiche senza riscaricare i dati, usa lo stesso percorso assoluto 
 - **Meteo:** [Provincia Autonoma di Trento – Meteotrentino, Archivio Dati](https://archivio.meteotrentino.it/share/#/scarica), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.it). Estremi misurati su intervalli di 15 min negli Annali recenti (400.55 e 400.56; possibili errori alle 00:00 per le minime), medie da misure di intervallo (400.02, almeno 95% dei campioni) e pioggia (10.00, 288 campioni). Il giorno civile usa l’ora solare UTC+1; si escludono giorno in corso, campioni marcati mancanti ed estremi di qualità dubbia o ricostruiti. Possono essere incluse misure provvisorie.
 - **Rilievo:** Tarquini S., Isola I., Favalli M., Battistini A., Dotta G. (2023), [TINITALY 1.1, INGV](https://doi.org/10.13127/tinitaly/1.1), CC BY 4.0; rilievo ricampionato da Meteotrentino a 250 m e dall’Atlante a circa 750 m.
 - **Confini:** Provincia Autonoma di Trento, [Comunità di valle](https://siatservices.provincia.tn.it/geonetwork/geonetwork/api/records/p_TN:58604ed2-ac1d-4f78-a00c-514fd3562c51) e [Comuni](https://siatservices.provincia.tn.it/geonetwork/geonetwork/api/records/p_TN:0dc5bc18-54de-4495-be3e-9e44f2135803), CC0; geometrie semplificate per la mappa.
+- **Fondo cartografico:** rilievo TINITALY, acqua e viabilità semplificate da [OpenFreeMap](https://openfreemap.org/) con [OpenMapTiles](https://openmaptiles.org/) e [contributori OpenStreetMap](https://www.openstreetmap.org/copyright). Le geometrie derivate da OSM nel fondo sono disponibili con [licenza ODbL](https://opendatacommons.org/licenses/odbl/1-0/).
 - **Stima:** combinazione con peso inverso al quadrato della distanza di un massimo di sei stazioni; almeno tre entro 30 km, la più vicina entro 15 km. Per la temperatura l’interpolazione agisce sugli scarti dal gradiente giornaliero di quota e non copre celle oltre 550 m sopra la stazione vicina più alta. La verifica con una stazione esclusa a turno riguarda solo il giorno più recente. La copertura è la frazione di celle stimabili nella fascia, non l’accuratezza.
 - **Indicatori:** servono stime per tutti i giorni del periodo in ciascuna cella. I massimi di pioggia a 24/48/72 ore usano finestre da mezzanotte e il picco locale è il massimo delle celle. La somma termica misura gradi-giorno sopra 10 °C, aprile–ottobre, non la produttività. Le fasce non uniformano le distribuzioni di quota.
+- **Riepilogo del comune:** ogni giorno e ogni indicatore fanno media sulle celle comunali con una stima disponibile quel giorno, a tutte le quote. Non sono misure di stazione; il confronto fra due giorni può includere celle diverse.
+
+### Rigenerare il fondo
+
+Il sito serve il fondo già generato. Per sostituirlo, procurarsi i 16 riquadri OpenFreeMap di livello 9 (x 270–273, y 180–183; versione originale `20261122_124456_pt`), chiamarli `osm-Z-X-Y.pbf` e usare i due file del rilievo presenti nella cache del refresh. La rigenerazione richiede `mapbox-vector-tile==2.2.0` oltre alle dipendenze dell’Atlante.
+
+```sh
+.venv/bin/python build_basemap.py PERCORSO_TILES .cache/dem_250m.json .cache/dem_250m.bin web/basemap.svg.gz
+```
 
 ## Verifica
 

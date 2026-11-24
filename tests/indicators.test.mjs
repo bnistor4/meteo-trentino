@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {aggregate, areaStats, dayIndex, addDays} from "../web/indicators.mjs";
+import {aggregate, areaStats, dayIndex, addDays, shownMeanDifference} from "../web/indicators.mjs";
+
+test("comparison difference agrees with the displayed one-decimal means",()=>{
+  assert.equal(shownMeanDifference(3.049,3.051),-.1);
+  assert.equal(shownMeanDifference(3.051,3.149),0);
+  assert.equal(shownMeanDifference(-3.05,-3),-.1);
+});
 
 test("rain windows overlap, honor dates and retain the earliest tie",()=>{
   const r=Int16Array.from([1,9,9,1,9,9]);
@@ -17,6 +23,13 @@ test("missing days are not zero, but dry cells have a zero without a peak date",
   const {values,peaks}=aggregate(r,2,0,1,"storm48",10);
   assert.deepEqual([...values],[NaN,0]);
   assert.deepEqual([...peaks],[-1,-1]);
+});
+
+test("daily maps use the selected day's reading without summing nearby days",()=>{
+  const r=Int16Array.from([20,130,0,-32768,55,60]);
+  assert.deepEqual([...aggregate(r,2,1,1,"rainDay",10).values],[0,NaN]);
+  assert.deepEqual([...aggregate(r,2,2,2,"max",10).values],[5.5,6]);
+  assert.deepEqual([...aggregate(r,2,0,0,"min",10).values],[2,13]);
 });
 
 test("area stats count only eligible elevations and include the highest cell's date",()=>{

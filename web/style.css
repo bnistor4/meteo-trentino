@@ -172,6 +172,78 @@ thead th { background:var(--soft); white-space:nowrap }
   .map-controls button { border-radius:0 !important }
   .map-controls button + button { border-top:0; border-left:1px solid var(--line) }
 }
+body { padding-top:env(safe-area-inset-top) }
+.map-figure { background:#edf0e9 }
+#atlas-map:focus:not(:focus-visible) { outline:none }
+.daily-switch { display:flex; padding:2px; border:1px solid var(--line); border-radius:999px; background:white }
+.daily-switch button,.active-chip { min-height:40px; padding:0 13px; border:0; border-radius:999px; background:white; color:var(--text); font-weight:650; font-size:13px }
+.daily-switch button[aria-pressed=true],#stations-toggle[aria-pressed=true] { background:var(--accent-bg); color:var(--accent) }
+.daily-switch button:hover,.active-chip:hover { background:var(--soft) }
+#active-filters { flex-basis:100%; display:flex; flex-wrap:wrap; gap:5px; box-shadow:none; pointer-events:none }
+.active-chip { min-height:36px; box-shadow:var(--shadow); pointer-events:auto }
+.legend-scale,.legend-text { font-size:12px }
+.history-note { margin-top:5px; color:var(--muted); font-size:12px; font-weight:600 }
+.forecast-link { color:var(--accent); font-size:12px; font-weight:650; text-underline-offset:2px; display:inline-flex; align-items:center; min-height:30px }
+.no-data::before { background:#edf0e9 }
+.out-band::before { background:#c6ced2 }
+.map-credit { bottom:env(safe-area-inset-bottom); flex-wrap:wrap; font-size:11px }
+.map-error { top:128px; max-width:calc(100% - 2 * var(--inset)) }
+.stat-secondary { font-weight:650 }
+.local-history { margin-top:5px }
+#daily-summary { border-top:1px solid var(--line); margin-top:12px; padding-top:8px }
+.daily-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0 8px }
+.daily-heading h3 { font-size:15px }
+#save-comune { min-height:44px; font-size:12px; padding:0 }
+.daily-values { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; margin:8px 0 }
+.daily-values > div { display:grid; padding:5px 7px; border-radius:8px; background:var(--soft) }
+#daily-table { min-width:0; margin-bottom:8px }
+#daily-table :is(th,td) { padding:5px; white-space:nowrap }
+.sheet.dock { position:fixed; inset:88px var(--inset) auto auto; margin:0; width:min(438px,calc(100% - 2 * var(--inset))); max-height:calc(100dvh - 112px) }
+.sheet.dock.wide { width:min(620px,calc(100% - 2 * var(--inset))) }
+.sheet:is(#metric-picker,.share-menu) { left:min(var(--panel-left,24px),calc(100vw - 410px)); right:auto; top:132px }
+.sheet#metric-picker { width:min(385px,calc(100% - 2 * var(--inset))); max-height:calc(100dvh - 150px) }
+.sheet.share-menu { width:min(234px,calc(100% - 2 * var(--inset))) }
+.share-menu .action-row { flex-direction:column; align-items:stretch; gap:4px }
+.share-menu .sheet-content { padding-block:8px 12px }
+.share-menu .sheet-heading h2 { font-size:15px }
+.metric-group h3 { margin-bottom:4px; color:var(--muted) }
+.metric-option { display:grid; gap:3px; width:100%; padding:8px 10px; text-align:left; border:0; border-radius:8px; background:white }
+.metric-option:hover,.metric-option[aria-pressed=true] { background:var(--accent-bg) }
+.metric-option span { font-size:12px; color:var(--muted) }
+#filters .date-controls > .action-row:has(> :only-child[hidden]) { display:none }
+.sheet-content,.pair { grid-template-columns:minmax(0,1fr); min-width:0 }
+.pair { padding:12px 0; background:none; border-block:1px solid var(--line); border-radius:0 }
+.pair-stat { background:var(--soft) }
+details { padding-top:5px; min-width:0 }
+details summary { display:flex; align-items:center; justify-content:space-between; gap:6px; min-height:44px; list-style:none }
+summary::-webkit-details-marker { display:none }
+details summary::after { content:""; width:8px; height:8px; margin-right:5px; border-right:2px solid currentColor; border-bottom:2px solid currentColor; transform:rotate(45deg) }
+details[open] > summary::after { transform:rotate(225deg) }
+.table-scroll { max-width:100% }
+@media(max-width:640px) {
+  .top { grid-template-columns:auto minmax(0,1fr) auto; gap:6px; padding:6px var(--inset) }
+  .brand span { display:none }
+  .top nav .control { padding-inline:5px }
+  .search { grid-row:auto; grid-column:auto }
+  .search input { padding-left:25px; padding-right:5px }
+  .search svg { left:7px; width:15px }
+  .toolbar .control { padding-inline:9px }
+  .daily-switch button { padding-inline:10px }
+  .share-button { width:44px }
+  .map-key { bottom:calc(22px + env(safe-area-inset-bottom)); width:min(275px,calc(100% - 105px)) }
+  .key-header p { font-size:12px }
+  .map-tools,.area-panel { bottom:calc(22px + env(safe-area-inset-bottom)) }
+  #contenuto:has(.area-panel:not([hidden])) .map-tools { top:auto; bottom:calc(46% + 30px + env(safe-area-inset-bottom)) }
+  #contenuto:has(.area-panel:not([hidden])) .map-key { visibility:hidden }
+  .sheet,.sheet.dock,.sheet:is(#metric-picker,.share-menu) { inset:auto 0 0; margin:0 auto; width:100%; padding-bottom:env(safe-area-inset-bottom); border-radius:18px 18px 0 0 }
+  .sheet.dock.wide,.sheet#metric-picker { width:100% }
+  .sheet.dock,.sheet#metric-picker { max-height:72dvh }
+  #valli > .sheet-content > .fields { grid-template-columns:minmax(0,1fr) }
+}
+@media (min-width:520px) and (max-height:420px) {
+  .area-panel { width:min(340px,49%); max-height:calc(100% - 76px); top:8px; bottom:auto }
+  #contenuto:has(.area-panel:not([hidden])) .map-tools { bottom:calc(22px + env(safe-area-inset-bottom)) }
+}
 @media print {
   body { height:auto; overflow:visible; display:block; print-color-adjust:exact; -webkit-print-color-adjust:exact }
   .top { display:flex; min-height:0; padding:0 0 5mm }
