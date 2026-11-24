@@ -2,6 +2,7 @@
 import argparse
 import base64
 import fcntl
+import gzip
 import json
 import math
 import os
@@ -23,6 +24,10 @@ ZONES = (
     "https://geoservices.provincia.tn.it/agol/rest/services/geologico/0_CGeom_Inq/MapServer/4/query"
     "?where=1%3D1&outFields=OBJECTID,nome&outSR=4326&geometryPrecision=5&f=geojson"
 )
+MUNICIPALITIES = (
+    "https://geoservices.provincia.tn.it/agol/rest/services/geologico/0_CGeom_Inq/MapServer/5/query"
+    "?where=1%3D1&outFields=codice,nome&outSR=4326&geometryPrecision=5&f=geojson"
+)
 ZONE_NAMES = [
     "Alta Valsugana e Bersntol", "Paganella", "Valsugana e Tesino", "Vallagarina",
     "Rotaliana–Königsberg", "Alto Garda e Ledro", "Val di Sole", "Val di Fiemme",
@@ -34,7 +39,9 @@ DAY = timedelta(days=1)
 MISSING = -32768
 STRIDE = 3
 BANDS = {"all": (0, 5000), "low": (0, 800), "mid": (800, 1400), "high": (1400, 5000)}
-SCALES = {"frost": 1, "rain": 10, "storm": 10, "heat": 1, "gdd": 1, "mean": 10}
+RECENT_DAYS = 90
+PIPELINE_VERSION = 3
+EXTREMA_QUALITY = {1, 2, 3, 7, 145}
 
 
 def fetch(url, target, reuse=False):
@@ -65,24 +72,28 @@ def eligible(n, missing, expected):
     return missing == 0 and n >= math.ceil(0.95 * expected)
 
 
-def read_days(path, first, last, variables, stations, expected):
+def read_days(path, first, last, variable, stations, expected, *, quality=None, complete=False):
     parquet = pq.ParquetFile(path)
     groups = []
     for i in range(parquet.num_row_groups):
         stats = parquet.metadata.row_group(i).column(1).statistics
         if stats is None or not stats.has_min_max or stats.max >= first and stats.min <= last:
             groups.append(i)
-    rows = parquet.read_row_groups(groups, columns=["station", "date", "n", "n_missing", *variables])
+    columns = ["station", "date", "n", "n_missing", variable]
+    if quality is not None:
+        columns.append("quality")
+    rows = parquet.read_row_groups(groups, columns=columns)
     out = {}
     for row in rows.to_pylist():
         day = row["date"]
         idx = stations.get(row["station"])
-        values = [row[var] for var in variables]
+        value = row[variable]
         if (idx is not None and first <= day <= last and eligible(row["n"], row["n_missing"], expected)
-                and all(v is not None and math.isfinite(v) for v in values)):
-            if variables == ["sum"] and values[0] < 0:
+                and (not complete or row["n"] == expected) and (quality is None or row["quality"] in quality)
+                and value is not None and math.isfinite(value)):
+            if variable == "sum" and value < 0:
                 continue
-            out.setdefault(day, {})[idx] = values
+            out.setdefault(day, {})[idx] = value
     return out
 
 
@@ -122,6 +133,16 @@ def season(last):
     return date(year, 4, 1), min(last, date(year, 10, 31))
 
 
+def summer(last):
+    year = last.year - (last < date(last.year, 6, 1))
+    return date(year, 6, 1), min(last, date(year, 8, 31))
+
+
+def spring(last):
+    year = last.year - (last < date(last.year, 3, 1))
+    return date(year, 3, 1), min(last, date(year, 5, 31))
+
+
 def complete_reduce(rows, transform, reduction):
     data = np.stack(rows)
     return reduction(transform(data), axis=0).astype(float, copy=False)
@@ -154,6 +175,22 @@ def polygon_parts(geometry):
             yield from polygon_parts(part)
 
 
+def territories(boundaries, lon, lat, id_key, name_of, tolerance):
+    indices = np.zeros(len(lon), dtype=np.int16)
+    areas = []
+    for feature in boundaries.get("features", []):
+        props = feature["properties"]
+        i = int(props[id_key])
+        geom = union_all(list(polygon_parts(make_valid(shape(feature["geometry"])))))
+        indices[contains_xy(geom, lon, lat)] = i
+        geometry = mapping(orient_polygons(geom.simplify(tolerance, preserve_topology=True)))
+        point = geom.representative_point()
+        areas.append({"id": i, "name": name_of(props, i), "geometry": {
+            "type": geometry["type"], "coordinates": round_settings(geometry["coordinates"])
+        }, "center": [round(point.x, 5), round(point.y, 5)]})
+    return indices, areas
+
+
 def grid_and_zones(dem_meta, dem_file, boundaries):
     nx, ny = dem_meta["nx"], dem_meta["ny"]
     # Downsample with center sampling; preserve source origin and cell alignment.
@@ -165,45 +202,34 @@ def grid_and_zones(dem_meta, dem_file, boundaries):
                            grid["north"] - (ys + 0.5) * dem_meta["dlat"])
     in_province = raw != dem_meta["nodata"]
     picked_lon, picked_lat, z = lon[in_province], lat[in_province], raw[in_province].astype(float)
-    zone_idx = np.zeros(len(z), dtype=np.int8)
-    zones = []
-    for feature in boundaries.get("features", []):
-        i = int(feature["properties"]["OBJECTID"])
-        geom = union_all(list(polygon_parts(make_valid(shape(feature["geometry"])))))
-        zone_idx[contains_xy(geom, picked_lon, picked_lat)] = i
-        simplified = orient_polygons(geom.simplify(0.00065, preserve_topology=True))
-        geometry = mapping(simplified)
-        point = geom.representative_point()
-        zones.append({"id": i, "name": ZONE_NAMES[i-1], "geometry": {
-            "type": geometry["type"], "coordinates": round_settings(geometry["coordinates"])
-        }, "center": [round(point.x, 5), round(point.y, 5)]})
+    zone_idx, zones = territories(boundaries, picked_lon, picked_lat, "OBJECTID",
+                                  lambda _, i: ZONE_NAMES[i-1], 0.00065)
     if len(zones) != 16 or (zone_idx > 0).mean() < 0.96:
         raise ValueError("Unexpected administrative boundary coverage")
     return grid, in_province, picked_lon, picked_lat, z, zone_idx, zones
 
 
-def summarize(fields, z, zone_idx, zones):
-    for zone in zones:
-        bands = {}
-        for band, (lo, hi) in BANDS.items():
-            mask = (zone_idx == zone["id"]) & (lo <= z) & (z < hi)
-            stats = {}
-            for key, values in fields.items():
-                covered = values[mask & np.isfinite(values)]
-                if covered.size:
-                    stats[key] = {
-                        "mean": round(float(covered.mean()), 1), "min": round(float(covered.min()), 1),
-                        "max": round(float(covered.max()), 1), "coverage": round(float(covered.size / mask.sum()), 3),
-                    }
-            bands[band] = {"km2": round(float(mask.sum() * 0.75 ** 2), 1), "stats": stats}
-        zone["bands"] = bands
+def held_out_error(d, elevations, samples, temperature):
+    ids = np.array(list(samples))
+    observed = np.array(list(samples.values()))
+    errors = []
+    for i, pos in enumerate(ids):
+        keep = np.arange(len(ids)) != i
+        prediction = estimate(d[pos:pos+1, ids[keep]], elevations[ids[keep]], elevations[pos:pos+1],
+                              observed[keep], temperature)[0]
+        if np.isfinite(prediction):
+            errors.append(abs(prediction-observed[i]))
+    return {"n": len(errors), "mae": round(float(np.mean(errors)), 1) if errors else None}
 
 
-def snapshot(summary, station_catalog, boundaries, dem_meta, dem, temp_path, rain_path):
+def snapshot(summary, station_catalog, boundaries, municipalities, dem_meta, dem, paths):
     generated = datetime.fromisoformat(summary["generated_at"]).astimezone(SOLAR)
     last = generated.date() - DAY
     first = last - 29 * DAY
+    history_start = last - (RECENT_DAYS - 1) * DAY
     grow_start, grow_end = season(last)
+    heat_start, heat_end = summer(last)
+    spring_start, spring_end = spring(last)
     stations = []
     for f in station_catalog["features"]:
         p = f["properties"]
@@ -213,34 +239,53 @@ def snapshot(summary, station_catalog, boundaries, dem_meta, dem, temp_path, rai
             if 10 < lon < 13 and 45 < lat < 48:
                 stations.append({"id": p["code"], "name": p["name"], "z": p["alt"], "lon": lon, "lat": lat})
     index = {s["id"]: i for i, s in enumerate(stations)}
-    temp = read_days(temp_path, min(first, grow_start), last, ["min", "mean", "max"], index, 96)
-    rain = read_days(rain_path, first, last, ["sum"], index, 288)
+    lows = read_days(paths["400.55"], min(history_start, spring_start), last, "min", index, 1, quality=EXTREMA_QUALITY)
+    highs = read_days(paths["400.56"], min(history_start, heat_start), last, "max", index, 1, quality=EXTREMA_QUALITY)
+    means = read_days(paths["400.02"], min(history_start, grow_start), last, "mean", index, 96)
+    rain = read_days(paths["10.00"], history_start, last, "sum", index, 288, complete=True)
+    sources = {"min": lows, "max": highs, "mean": means, "rain": rain}
     # A delayed or partial upstream release must not replace the last good published snapshot.
-    if min(len(temp.get(last, {})), len(rain.get(last, {}))) < 20:
+    if min(len(source.get(last, {})) for source in sources.values()) < 20:
         raise ValueError(f"Insufficient station data for last complete solar day {last.isoformat()}")
     grid, mask, lon, lat, z, zone_idx, zones = grid_and_zones(dem_meta, dem, boundaries)
+    comune_idx, comuni = territories(municipalities, lon, lat, "codice",
+                                    lambda p, _: p["nome"].title().replace("' ", "'"), 0.00035)
+    if len(comuni) < 150 or len({x["id"] for x in comuni}) != len(comuni) or (comune_idx > 0).mean() < 0.96:
+        raise ValueError("Unexpected municipal boundary coverage")
     slon, slat, sz = (np.array([s[k] for s in stations]) for k in ("lon", "lat", "z"))
     d = distances(lon, lat, slon, slat)
 
-    def project(samples, idx, temperature):
+    def project(samples, temperature):
         if not samples:
             return np.full(len(z), np.nan)
         ids = list(samples)
-        return estimate(d[:, ids], sz[ids], z, np.array(list(samples.values()))[:, idx], temperature)
+        return estimate(d[:, ids], sz[ids], z, np.array(list(samples.values())), temperature)
 
-    recent = list(dates(first, last))
-    frost = complete_reduce([project(temp.get(day), 0, True) for day in recent], frost_indicator, np.sum)
-    heat = complete_reduce([project(temp.get(day), 2, True) for day in recent], heat_indicator, np.sum)
-    rainfall = [project(rain.get(day), 0, False) for day in recent]
-    gdd = complete_reduce([project(temp.get(day), 1, True) for day in dates(grow_start, grow_end)],
+    recent = list(dates(history_start, last))
+    daily = {k: np.stack([project(source.get(day), k != "rain") for day in recent])
+             for k, source in sources.items()}
+    heat = complete_reduce([project(highs.get(day), True) for day in dates(heat_start, heat_end)],
+                           heat_indicator, np.sum)
+    spring_frost = complete_reduce([project(lows.get(day), True) for day in dates(spring_start, spring_end)],
+                                   frost_indicator, np.sum)
+    gdd = complete_reduce([project(means.get(day), True) for day in dates(grow_start, grow_end)],
                           lambda v: np.maximum(v - 10, 0), np.sum)
     fields = {
-        "frost": frost, "rain": np.sum(rainfall, axis=0), "storm": np.max(rainfall, axis=0),
-        "heat": heat, "gdd": gdd, "mean": project(temp[last], 1, True),
+        "frost": frost_indicator(daily["min"][-30:]).sum(axis=0),
+        "rain": daily["rain"][-30:].sum(axis=0), "storm": daily["rain"][-30:].max(axis=0),
+        "heat": heat, "spring": spring_frost, "gdd": gdd, "mean": daily["mean"][-1],
     }
     if any(np.isfinite(x).mean() < 0.20 for x in fields.values()):
         raise ValueError("Less than 20% provincial coverage on an indicator; retaining the previous snapshot")
-    summarize(fields, z, zone_idx, zones)
+    def pack_daily(key, values):
+        raster = np.full((len(recent), *mask.shape), MISSING, dtype="<i2")
+        quantized = np.rint(values * 10).clip(-32767, 32767)
+        if key == "min":
+            quantized = np.where((values > 0) & (quantized == 0), 1, quantized)
+        if key == "max":
+            quantized = np.where((values < 30) & (quantized == 300), 299, quantized)
+        raster[:, mask] = np.where(np.isfinite(values), quantized, MISSING)
+        return base64.b64encode(gzip.compress(raster.tobytes(), compresslevel=5, mtime=0)).decode()
 
     def pack(values):
         raster = np.full(mask.shape, np.nan)
@@ -248,20 +293,24 @@ def snapshot(summary, station_catalog, boundaries, dem_meta, dem, temp_path, rai
         return encoded(raster)
 
     visible_stations = []
-    for i in sorted(temp[last].keys() | rain[last].keys()):
+    for i in sorted(set().union(*(s[last] for s in sources.values()))):
         point = dict(stations[i])
-        if i in temp[last]:
-            point.update(dict(zip(("min", "mean", "max"), [round(float(v), 1) for v in temp[last][i]])))
-        if i in rain[last]:
-            point["rain"] = round(float(rain[last][i][0]), 1)
+        for key, source in sources.items():
+            if i in source[last]:
+                point[key] = round(float(source[last][i]), 1)
         visible_stations.append(point)
+    between_stations = distances(slon, slat, slon, slat)
+    validation = {k: held_out_error(between_stations, sz, s[last], k != "rain") for k, s in sources.items()}
     return {
-        "schema": 1, "sourceVersion": summary["version"], "sourceGeneratedAt": summary["generated_at"],
+        "schema": 2, "sourceVersion": summary["version"], "sourceGeneratedAt": summary["generated_at"],
         "latest": last.isoformat(), "start": first.isoformat(),
         "seasonStart": grow_start.isoformat(), "seasonEnd": grow_end.isoformat(),
-        "grid": grid, "elevation": pack(z), "zoneGrid": pack(zone_idx),
-        "layers": {k: {"data": pack(v * SCALES[k]), "scale": SCALES[k]} for k, v in fields.items()},
-        "zones": zones, "stations": visible_stations,
+        "heatStart": heat_start.isoformat(), "heatEnd": heat_end.isoformat(),
+        "springStart": spring_start.isoformat(), "springEnd": spring_end.isoformat(),
+        "grid": grid, "elevation": pack(z), "zoneGrid": pack(zone_idx), "comuneGrid": pack(comune_idx),
+        "daily": {"start": history_start.isoformat(), "scale": 10, "fields": {k: pack_daily(k, v) for k, v in daily.items()}},
+        "layers": {k: {"data": pack(fields[k]), "scale": 1} for k in ("gdd", "heat", "spring")},
+        "zones": zones, "comuni": comuni, "stations": visible_stations, "validation": validation,
     }
 
 
@@ -279,28 +328,30 @@ def refresh(output, cache, trigger):
             existing = read_json(output)
             if existing.get("sourceVersion", "") > summary["version"]:
                 raise ValueError("Upstream catalog version went backwards")
-            if existing.get("sourceVersion") == summary["version"] and existing.get("pipelineVersion") == 1:
+            if existing.get("sourceVersion") == summary["version"] and existing.get("pipelineVersion") == PIPELINE_VERSION:
                 print(json.dumps({"event": "unchanged", "trigger": trigger, "sourceVersion": summary["version"]}))
                 return
-        paths = [files["400.00"], files["10.00"]]
-        if any(not re.fullmatch(r"aggregates/daily/(400|10)\.00\.v[\w-]+\.parquet", p) for p in paths):
+        paths = {code: files[code] for code in ("400.55", "400.56", "400.02", "10.00")}
+        if any(not re.fullmatch(rf"aggregates/daily/{re.escape(code)}\.v[\w-]+\.parquet", p) for code,p in paths.items()):
             raise ValueError("Unexpected upstream aggregate path")
         with ThreadPoolExecutor(max_workers=6) as pool:
             jobs = [
                 pool.submit(fetch, SOURCE + "catalog/stations.json", cache / "stations.json"),
                 pool.submit(fetch, ZONES, cache / "zones.geojson", True),
+                pool.submit(fetch, MUNICIPALITIES, cache / "comuni.geojson", True),
                 pool.submit(fetch, SOURCE + "assets/dem_250m.json", cache / "dem_250m.json", True),
                 pool.submit(fetch, SOURCE + "assets/dem_250m.bin", cache / "dem_250m.bin", True),
-                *[pool.submit(fetch, SOURCE + p, cache / Path(p).name, True) for p in paths],
+                *[pool.submit(fetch, SOURCE + p, cache / Path(p).name, True) for p in paths.values()],
             ]
-            stations, zones, header, dem, temp, rain = [j.result() for j in jobs]
-        payload = snapshot(summary, read_json(stations), read_json(zones), read_json(header), dem, temp, rain)
-        payload.update({"updatedAt": datetime.now(UTC).isoformat(), "trigger": trigger, "pipelineVersion": 1})
+            stations, zones, comuni, header, dem, *aggregates = [j.result() for j in jobs]
+        payload = snapshot(summary, read_json(stations), read_json(zones), read_json(comuni), read_json(header), dem,
+                           dict(zip(paths, aggregates)))
+        payload.update({"updatedAt": datetime.now(UTC).isoformat(), "trigger": trigger, "pipelineVersion": PIPELINE_VERSION})
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=output.parent, delete=False) as tmp:
             json.dump(payload, tmp, allow_nan=False, separators=(",", ":"), ensure_ascii=False)
         os.replace(tmp.name, output)
         for path in cache.glob("*.parquet"):
-            if path not in (temp, rain):
+            if path not in aggregates:
                 path.unlink()
         print(json.dumps({
             "event": "published", "trigger": trigger, "updatedAt": payload["updatedAt"],

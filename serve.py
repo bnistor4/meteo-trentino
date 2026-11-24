@@ -7,6 +7,7 @@ WEB = Path(__file__).resolve().parent / "web"
 DATA = Path(os.environ.get("ATLAS_SNAPSHOT", WEB / "data" / "atlas.json"))
 ROUTES = {"/": WEB / "index.html", "/index.html": WEB / "index.html",
           "/style.css": WEB / "style.css", "/app.js": WEB / "app.js",
+          "/indicators.mjs": WEB / "indicators.mjs",
           "/icon.svg": WEB / "icon.svg", "/data/atlas.json": DATA}
 HEADERS = [
     ("Cache-Control", "no-cache"), ("X-Content-Type-Options", "nosniff"),

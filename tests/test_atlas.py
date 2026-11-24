@@ -4,7 +4,7 @@ from datetime import date
 
 import numpy as np
 
-from refresh import complete_reduce, distances, eligible, encoded, estimate, frost_indicator, season, summarize
+from refresh import complete_reduce, distances, eligible, encoded, estimate, frost_indicator, held_out_error, season, spring, summer
 
 
 class IndicatorTests(unittest.TestCase):
@@ -40,11 +40,16 @@ class IndicatorTests(unittest.TestCase):
         actual = np.frombuffer(base64.b64decode(encoded(np.array([-7.1, np.nan, 11.8]))), dtype="<i2")
         np.testing.assert_array_equal(actual, [-7, -32768, 12])
 
-    def test_coverage_uses_area_in_the_selected_band(self):
-        zones = [{"id": 1}]
-        summarize({"mean": np.array([5., np.nan, 8.])}, np.array([500., 500., 1100.]), np.array([1, 1, 1]), zones)
-        self.assertEqual(zones[0]["bands"]["low"]["stats"]["mean"], {"min": 5, "max": 5, "mean": 5, "coverage": .5})
-        self.assertEqual(zones[0]["bands"]["high"]["stats"], {})
+    def test_seasonal_extreme_periods(self):
+        self.assertEqual(spring(date(2026, 1, 1)), (date(2025, 3, 1), date(2025, 5, 31)))
+        self.assertEqual(spring(date(2026, 3, 31)), (date(2026, 3, 1), date(2026, 3, 31)))
+        self.assertEqual(summer(date(2026, 11, 23)), (date(2026, 6, 1), date(2026, 8, 31)))
+        self.assertEqual(summer(date(2026, 7, 1)), (date(2026, 6, 1), date(2026, 7, 1)))
+
+    def test_held_out_error_does_not_include_target(self):
+        d = np.ones((4, 4)) - np.eye(4)
+        self.assertEqual(held_out_error(d, np.zeros(4), {0: 0., 1: 0., 2: 0., 3: 12.}, False),
+                         {"n": 4, "mae": 6.})
 
 
 if __name__ == "__main__":
