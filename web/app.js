@@ -295,7 +295,7 @@ function renderRaster() {
   const colors=m.stops.map(c => [1,3,5].map(j => parseInt(c.slice(j,j+2),16)));
   const at=(i, fallback) => z[i]!==undefined && z[i]!==-32768 ? z[i] : fallback;
   for (let i=0;i<z.length;i++) {
-    if (z[i]===-32768) continue;
+    if (z[i]===-32768 || state.zoneArray[i]<=0) continue;
     const iy=Math.floor(i/w), ix=i%w, val=values[i], outside=z[i]<bandLo || z[i]>=bandHi;
     const slope=at(i+1,z[i])-at(i-1,z[i])+at(i+w,z[i])-at(i-w,z[i]);
     const shade=outside || !Number.isFinite(val) ? Math.max(-12,Math.min(12,slope*.045)) : 0;
