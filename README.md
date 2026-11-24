@@ -13,7 +13,7 @@ OPENBLAS_NUM_THREADS=1 .venv/bin/python refresh.py
 .venv/bin/gunicorn --bind 127.0.0.1:8765 serve:application
 ```
 
-`web/` è il sito statico; la stessa cartella si può pubblicare con un qualsiasi servizio statico. Per Devin Apps, impostare `ATLAS_SNAPSHOT` e usare `refresh.py --output ... --cache ... --trigger cron` con percorsi di runtime assoluti fuori dal checkout. La sostituzione atomica consente di servire la versione precedente anche durante un aggiornamento.
+`web/` è il sito statico; la stessa cartella si può pubblicare con un qualsiasi servizio statico. Le mappe predefinite usano `data/atlas.json.gz`; le serie giornaliere vengono scaricate solo quando si seleziona un periodo personalizzato. Per Devin Apps, impostare `ATLAS_SNAPSHOT` al percorso assoluto di `atlas.json.gz` e usare lo stesso percorso per `refresh.py --output`, con `--cache` fuori dal checkout e `--trigger cron`. Le serie di ciascuna versione sono scritte prima di pubblicare il nuovo atlante.
 
 ## Pubblicazione e aggiornamento
 

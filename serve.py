@@ -1,14 +1,15 @@
 """WSGI adapter for Devin Apps; GitHub Pages serves the same static assets."""
 import mimetypes
 import os
+import re
 from pathlib import Path
 
 WEB = Path(__file__).resolve().parent / "web"
-DATA = Path(os.environ.get("ATLAS_SNAPSHOT", WEB / "data" / "atlas.json"))
+DATA = Path(os.environ.get("ATLAS_SNAPSHOT", WEB / "data" / "atlas.json.gz"))
 ROUTES = {"/": WEB / "index.html", "/index.html": WEB / "index.html",
           "/style.css": WEB / "style.css", "/app.js": WEB / "app.js",
           "/indicators.mjs": WEB / "indicators.mjs",
-          "/icon.svg": WEB / "icon.svg", "/data/atlas.json": DATA}
+          "/icon.svg": WEB / "icon.svg", "/data/atlas.json.gz": DATA}
 HEADERS = [
     ("Cache-Control", "no-cache"), ("X-Content-Type-Options", "nosniff"),
     ("Referrer-Policy", "strict-origin-when-cross-origin"),
@@ -18,7 +19,11 @@ HEADERS = [
 
 def application(environ, start_response):
     method = environ["REQUEST_METHOD"]
-    path = ROUTES.get(environ["PATH_INFO"])
+    url = environ["PATH_INFO"]
+    path = ROUTES.get(url)
+    history = re.fullmatch(r"/data/(history-\d+-\d{8}T\d{4}\.bin\.gz)", url)
+    if history:
+        path = DATA.with_name(history[1])
     if method not in {"GET", "HEAD"}:
         start_response("405 Method Not Allowed", [*HEADERS, ("Allow", "GET, HEAD")])
         return [b""]
@@ -30,7 +35,7 @@ def application(environ, start_response):
     except FileNotFoundError:
         start_response("503 Service Unavailable", [*HEADERS, ("Content-Type", "text/plain; charset=utf-8")])
         return [b"" if method == "HEAD" else b"Dati non disponibili"]
-    content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    content_type = "application/gzip" if url.endswith(".gz") else mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     etag = '"' + hex(os.fstat(file.fileno()).st_mtime_ns)[2:] + '"'
     headers = [*HEADERS, ("Content-Type", content_type), ("ETag", etag)]
     if environ.get("HTTP_IF_NONE_MATCH") == etag:

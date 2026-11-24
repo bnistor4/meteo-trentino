@@ -40,7 +40,8 @@ MISSING = -32768
 STRIDE = 3
 BANDS = {"all": (0, 5000), "low": (0, 800), "mid": (800, 1400), "high": (1400, 5000)}
 RECENT_DAYS = 90
-PIPELINE_VERSION = 3
+PIPELINE_VERSION = 4
+DAILY_KEYS = ("min", "max", "mean", "rain")
 EXTREMA_QUALITY = {1, 2, 3, 7, 145}
 
 
@@ -157,7 +158,7 @@ def heat_indicator(data):
 
 
 def encoded(values):
-    packed = np.where(np.isfinite(values), np.rint(values), MISSING).astype("<i2")
+    packed = np.where(np.isfinite(values), np.rint(values).clip(-32767, 32767), MISSING).astype("<i2")
     return base64.b64encode(packed.tobytes()).decode()
 
 
@@ -222,6 +223,13 @@ def held_out_error(d, elevations, samples, temperature):
     return {"n": len(errors), "mae": round(float(np.mean(errors)), 1) if errors else None}
 
 
+def rain_peak(rows, span):
+    rolling = np.lib.stride_tricks.sliding_window_view(rows, span, axis=0).sum(axis=-1)
+    values = rolling.max(axis=0)
+    peaks = np.where(values > 0, rolling.argmax(axis=0) + span - 1, -1)
+    return values, peaks
+
+
 def snapshot(summary, station_catalog, boundaries, municipalities, dem_meta, dem, paths):
     generated = datetime.fromisoformat(summary["generated_at"]).astimezone(SOLAR)
     last = generated.date() - DAY
@@ -270,27 +278,40 @@ def snapshot(summary, station_catalog, boundaries, municipalities, dem_meta, dem
                                    frost_indicator, np.sum)
     gdd = complete_reduce([project(means.get(day), True) for day in dates(grow_start, grow_end)],
                           lambda v: np.maximum(v - 10, 0), np.sum)
-    fields = {
-        "frost": frost_indicator(daily["min"][-30:]).sum(axis=0),
-        "rain": daily["rain"][-30:].sum(axis=0), "storm": daily["rain"][-30:].max(axis=0),
-        "heat": heat, "spring": spring_frost, "gdd": gdd, "mean": daily["mean"][-1],
-    }
-    if any(np.isfinite(x).mean() < 0.20 for x in fields.values()):
-        raise ValueError("Less than 20% provincial coverage on an indicator; retaining the previous snapshot")
-    def pack_daily(key, values):
-        raster = np.full((len(recent), *mask.shape), MISSING, dtype="<i2")
+    def quantize_daily(key, values):
         quantized = np.rint(values * 10).clip(-32767, 32767)
         if key == "min":
             quantized = np.where((values > 0) & (quantized == 0), 1, quantized)
         if key == "max":
             quantized = np.where((values < 30) & (quantized == 300), 299, quantized)
-        raster[:, mask] = np.where(np.isfinite(values), quantized, MISSING)
-        return base64.b64encode(gzip.compress(raster.tobytes(), compresslevel=5, mtime=0)).decode()
+        return quantized
 
     def pack(values):
         raster = np.full(mask.shape, np.nan)
         raster[mask] = values
         return encoded(raster)
+
+    quantized = {key: quantize_daily(key, daily[key]) for key in DAILY_KEYS}
+    recent_rain = quantized["rain"][-30:]
+    fields = {
+        "frost": frost_indicator(quantized["min"][-30:]).sum(axis=0),
+        "rain": recent_rain.sum(axis=0), "heat": heat, "spring": spring_frost,
+        "gdd": gdd, "mean": quantized["mean"][-1],
+    }
+    peaks = {}
+    for key, span in (("storm", 1), ("storm48", 2), ("storm72", 3)):
+        fields[key], day_indices = rain_peak(recent_rain, span)
+        peaks[key] = pack(np.where(day_indices >= 0, day_indices + RECENT_DAYS - 30, -1))
+    if any(np.isfinite(x).mean() < 0.20 for x in fields.values()):
+        raise ValueError("Less than 20% provincial coverage on an indicator; retaining the previous snapshot")
+    layers = {key: {"data": pack(values), "scale": 10 if key in {"rain", "storm", "storm48", "storm72", "mean"} else 1}
+              for key, values in fields.items()}
+    for key, indices in peaks.items():
+        layers[key]["peaks"] = indices
+    series = np.full((len(DAILY_KEYS), len(recent), *mask.shape), MISSING, dtype="<i2")
+    for i, key in enumerate(DAILY_KEYS):
+        values = quantized[key]
+        series[i][:, mask] = np.where(np.isfinite(values), values, MISSING)
 
     visible_stations = []
     for i in sorted(set().union(*(s[last] for s in sources.values()))):
@@ -302,16 +323,23 @@ def snapshot(summary, station_catalog, boundaries, municipalities, dem_meta, dem
     between_stations = distances(slon, slat, slon, slat)
     validation = {k: held_out_error(between_stations, sz, s[last], k != "rain") for k, s in sources.items()}
     return {
-        "schema": 2, "sourceVersion": summary["version"], "sourceGeneratedAt": summary["generated_at"],
+        "schema": 3, "sourceVersion": summary["version"], "sourceGeneratedAt": summary["generated_at"],
         "latest": last.isoformat(), "start": first.isoformat(),
         "seasonStart": grow_start.isoformat(), "seasonEnd": grow_end.isoformat(),
         "heatStart": heat_start.isoformat(), "heatEnd": heat_end.isoformat(),
         "springStart": spring_start.isoformat(), "springEnd": spring_end.isoformat(),
         "grid": grid, "elevation": pack(z), "zoneGrid": pack(zone_idx), "comuneGrid": pack(comune_idx),
-        "daily": {"start": history_start.isoformat(), "scale": 10, "fields": {k: pack_daily(k, v) for k, v in daily.items()}},
-        "layers": {k: {"data": pack(fields[k]), "scale": 1} for k in ("gdd", "heat", "spring")},
+        "daily": {"start": history_start.isoformat(), "scale": 10, "keys": DAILY_KEYS},
+        "layers": layers,
         "zones": zones, "comuni": comuni, "stations": visible_stations, "validation": validation,
-    }
+    }, series
+
+
+def write_gzip(path, data):
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as tmp:
+        with gzip.GzipFile(filename="", fileobj=tmp, mode="wb", compresslevel=5, mtime=0) as stream:
+            stream.write(data)
+    os.replace(tmp.name, path)
 
 
 def refresh(output, cache, trigger):
@@ -325,7 +353,8 @@ def refresh(output, cache, trigger):
         if not fresh:
             raise ValueError("Upstream archive is more than 48 hours old")
         if output.exists():
-            existing = read_json(output)
+            with gzip.open(output, "rt", encoding="utf-8") as snapshot_file:
+                existing = json.load(snapshot_file)
             if existing.get("sourceVersion", "") > summary["version"]:
                 raise ValueError("Upstream catalog version went backwards")
             if existing.get("sourceVersion") == summary["version"] and existing.get("pipelineVersion") == PIPELINE_VERSION:
@@ -344,12 +373,18 @@ def refresh(output, cache, trigger):
                 *[pool.submit(fetch, SOURCE + p, cache / Path(p).name, True) for p in paths.values()],
             ]
             stations, zones, comuni, header, dem, *aggregates = [j.result() for j in jobs]
-        payload = snapshot(summary, read_json(stations), read_json(zones), read_json(comuni), read_json(header), dem,
-                           dict(zip(paths, aggregates)))
+        payload, series = snapshot(summary, read_json(stations), read_json(zones), read_json(comuni), read_json(header), dem,
+                                   dict(zip(paths, aggregates)))
         payload.update({"updatedAt": datetime.now(UTC).isoformat(), "trigger": trigger, "pipelineVersion": PIPELINE_VERSION})
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=output.parent, delete=False) as tmp:
-            json.dump(payload, tmp, allow_nan=False, separators=(",", ":"), ensure_ascii=False)
-        os.replace(tmp.name, output)
+        version = payload["sourceVersion"]
+        if not re.fullmatch(r"[0-9]{8}T[0-9]{4}", version):
+            raise ValueError("Unexpected archive version")
+        history = output.with_name(f"history-{PIPELINE_VERSION}-{version}.bin.gz")
+        payload["daily"]["file"] = history.name
+        write_gzip(history, memoryview(series).cast("B"))
+        write_gzip(output, json.dumps(payload, allow_nan=False, separators=(",", ":"), ensure_ascii=False).encode())
+        for old in sorted(output.parent.glob("history-*.bin.gz"), key=lambda path: path.stat().st_mtime, reverse=True)[2:]:
+            old.unlink()
         for path in cache.glob("*.parquet"):
             if path not in aggregates:
                 path.unlink()
@@ -362,7 +397,7 @@ def refresh(output, cache, trigger):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=Path("web/data/atlas.json"))
+    parser.add_argument("--output", type=Path, default=Path("web/data/atlas.json.gz"))
     parser.add_argument("--cache", type=Path, default=Path(".cache"))
     parser.add_argument("--trigger", choices=["manual", "cron", "programma", "deploy"], default="manual")
     args = parser.parse_args()

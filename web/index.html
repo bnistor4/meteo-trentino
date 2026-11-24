@@ -63,6 +63,11 @@
       </div>
       <div class="map-layout">
         <div class="card map-card">
+          <div class="map-context">
+            <strong id="map-context"></strong>
+            <small>Dati passati, non allerte. <a href="https://www.meteotrentino.it/contatti-e-informazioni/sistema-di-allerta-provinciale/">Allerte ufficiali</a></small>
+          </div>
+          <div id="map-error" class="empty" hidden>La mappa non è disponibile. <button type="button" id="retry-map" class="linklike">Riprova</button></div>
           <div class="map-figure" id="map-figure">
             <svg id="atlas-map" viewBox="0 0 800 680" role="group" aria-label="Mappa interattiva della Provincia autonoma di Trento"></svg>
             <div class="map-controls">
@@ -90,6 +95,7 @@
             <div class="eyebrow"><span class="step">⌖</span> IN DETTAGLIO</div>
             <h3 id="area-name"></h3>
             <div id="zone-read" aria-live="polite"></div>
+            <div id="local-station" class="local-station" hidden></div>
             <a class="inline-link" href="#valli" id="map-compare">Confronta tutte le valli <span aria-hidden="true">→</span></a>
           </article>
         </aside>

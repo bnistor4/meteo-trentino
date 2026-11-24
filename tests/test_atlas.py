@@ -4,7 +4,7 @@ from datetime import date
 
 import numpy as np
 
-from refresh import complete_reduce, distances, eligible, encoded, estimate, frost_indicator, held_out_error, season, spring, summer
+from refresh import complete_reduce, distances, eligible, encoded, estimate, frost_indicator, held_out_error, rain_peak, season, spring, summer
 
 
 class IndicatorTests(unittest.TestCase):
@@ -37,8 +37,14 @@ class IndicatorTests(unittest.TestCase):
         np.testing.assert_allclose(result, [12.8, np.nan])
 
     def test_signed_raster_and_missingness(self):
-        actual = np.frombuffer(base64.b64decode(encoded(np.array([-7.1, np.nan, 11.8]))), dtype="<i2")
-        np.testing.assert_array_equal(actual, [-7, -32768, 12])
+        actual = np.frombuffer(base64.b64decode(encoded(np.array([-7.1, np.nan, 11.8, 40000]))), dtype="<i2")
+        np.testing.assert_array_equal(actual, [-7, -32768, 12, 32767])
+
+    def test_default_rain_peaks_keep_the_earliest_window_and_skip_incomplete_cells(self):
+        data = np.array([[10, 0, 2], [4, 0, np.nan], [10, 0, 2], [1, 0, 0]])
+        values, peaks = rain_peak(data, 2)
+        np.testing.assert_allclose(values, [14, 0, np.nan])
+        np.testing.assert_array_equal(peaks, [1, -1, -1])
 
     def test_seasonal_extreme_periods(self):
         self.assertEqual(spring(date(2026, 1, 1)), (date(2025, 3, 1), date(2025, 5, 31)))

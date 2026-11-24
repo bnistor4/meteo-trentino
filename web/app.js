@@ -58,7 +58,7 @@ const frame = $("atlas-map");
 const it = new Intl.NumberFormat("it-IT",{maximumFractionDigits:1});
 const fmt = v => it.format(v);
 const pct = v => Math.round(v * 100) + "%";
-const value = (number, key) => fmt(number) + " " + metrics[key].unit;
+const value = (number, key) => fmt(number) + " " + (metrics[key].unit==="gg" ? "giorni" : metrics[key].unit);
 const day = iso => new Intl.DateTimeFormat("it-IT",{day:"numeric",month:"short",year:"numeric",timeZone:"UTC"}).format(new Date(iso));
 const when = iso => new Intl.DateTimeFormat("it-IT",{dateStyle:"short",timeStyle:"short",timeZone:"Europe/Rome"}).format(new Date(iso));
 const activeView = () => {
@@ -114,18 +114,24 @@ function restoreUrl() {
   const from=p.get("dal"), to=p.get("al");
   const iso=s=>/^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) && addDays(s,0)===s;
   const requested=iso(from) && iso(to) && from<=to;
-  state.dates=requested && from>=d.daily.start && to<=d.latest ? [from,to] : null;
-  $("date-status").textContent=requested && !state.dates ? "Il periodo del link non è più disponibile. Mostro il periodo predefinito." : "";
+  const dates=requested && from>=d.daily.start && to<=d.latest ? [from,to] : null;
+  state.dates=state.daily ? dates : null;
+  $("date-status").textContent=requested && !dates ? "Il periodo del link non è più disponibile. Mostro il periodo predefinito." : "";
   $("show-stations").checked=p.get("stazioni")==="1";
+  return dates;
 }
 function layerFor(key) {
   const d=state.data, [from,to]=boundsFor(key);
-  const seasonLayer=key==="gdd" || key==="spring" || (key==="heat" && !state.dates);
-  const id=[key,from,to,seasonLayer].join("/");
+  const precomputed=key==="gdd" || key==="spring" || !state.dates;
+  const id=[key,from,to,precomputed].join("/");
   if (state.layers.has(id)) return state.layers.get(id);
   const field=key==="frost" ? "min" : key==="heat" ? "max" : key==="mean" ? "mean" : "rain";
   const size=state.elevation.length;
-  const layer=seasonLayer ? {values:Float32Array.from(decode(d.layers[key].data), n=>n===-32768 ? NaN : n/d.layers[key].scale)} :
+  const packed=d.layers[key];
+  const layer=precomputed ? {
+    values:Float32Array.from(decode(packed.data), n=>n===-32768 ? NaN : n/packed.scale),
+    peaks:packed.peaks ? decode(packed.peaks) : undefined
+  } :
     aggregate(state.daily[field],size,dayIndex(from,d.daily.start),dayIndex(to,d.daily.start),key,d.daily.scale);
   if (state.layers.size>=12) state.layers.delete(state.layers.keys().next().value);
   state.layers.set(id,layer);
@@ -188,6 +194,10 @@ function positionFromPointer(event) {
   const p = new DOMPoint(event.clientX,event.clientY).matrixTransform(frame.getScreenCTM().inverse());
   return [Math.floor(p.x),Math.floor(p.y)];
 }
+function stationDescription(s) {
+  return [["min","Minima","mean"],["mean","Media","mean"],["max","Massima","mean"],["rain","Pioggia","rain"]]
+    .filter(([key])=>s[key]!=null).map(([key,label,metric])=>label+" "+value(s[key],metric)).join(" · ");
+}
 function placeTooltip(event) {
   if (!state.data || event.target.classList.contains("station")) return;
   const {w,h}=state.data.grid;
@@ -199,7 +209,7 @@ function placeTooltip(event) {
   const metric=state.mapMetric, layer=layerFor(metric), raw=layer.values[i], peak=peakText(metric,layer.peaks?.[i]);
   const area=(state.comune && state.comuneById[state.comuneArray[i]]) || state.zoneById[id];
   tooltip(event.clientX,event.clientY,area.name,
-    [Number.isFinite(raw) ? value(raw,metric) : "Stima non disponibile",fmt(z)+" m",peak].filter(Boolean).join(" · "));
+    [Number.isFinite(raw) ? "Stima sulla mappa: "+value(raw,metric) : "Stima non disponibile",fmt(z)+" m",peak].filter(Boolean).join(" · "));
 }
 function drawBase() {
   const d=state.data, {w,h}=d.grid;
@@ -242,9 +252,7 @@ function drawBase() {
     const [x,y]=project(s.lon,s.lat);
     const circle=svg("circle",{cx:x,cy:y,r:1.05,class:"station",style:"stroke-width:.33px",tabindex:0,
       "aria-label":s.name});
-    const description=["Misure di stazione · "+day(d.latest)+" · 00–24 (UTC+1, dati anche provvisori)",
-      ...[["min","Minima","mean"],["mean","Media","mean"],["max","Massima","mean"],["rain","Pioggia","rain"]]
-        .filter(([k])=>s[k]!=null).map(([k,label,metric])=>label+" "+value(s[k],metric))].join(" · ");
+    const description="Misure di stazione · "+day(d.latest)+" · 00–24 (UTC+1, dati anche provvisori) · "+stationDescription(s);
     circle.dataset.elevation=s.z;
     circle.setAttribute("aria-label",s.name+" · "+description);
     const show = e => {
@@ -303,8 +311,8 @@ function renderRaster() {
     const iy=Math.floor(i/w), ix=i%w, val=values[i], outside=z[i]<bandLo || z[i]>=bandHi;
     const slope=at(i+1,z[i])-at(i-1,z[i])+at(i+w,z[i])-at(i-w,z[i]);
     const shade=outside || !Number.isFinite(val) ? Math.max(-12,Math.min(12,slope*.045)) : 0;
-    const rgb=outside ? [214,224,209] : !Number.isFinite(val) ?
-      ((ix+iy)%5<2 ? [175,188,175] : [224,231,218]) : gradient(colors,low,high,val);
+    const rgb=outside ? (ix%3===0 && iy%3===0 ? [105,113,122] : [213,221,229]) : !Number.isFinite(val) ?
+      ((ix+iy)%5<2 ? [117,126,118] : [232,235,222]) : gradient(colors,low,high,val);
     for (let j=0;j<3;j++) img.data[4*i+j]=rgb[j]+(outside ? shade*.3 : shade);
     img.data[4*i+3]=255;
   }
@@ -315,6 +323,7 @@ function legend() {
   const m=metrics[state.mapMetric], [lo,hi]=metricRange(state.mapMetric);
   const labels=el("div",null,"legend-text");
   labels.append(el("span",m.unit==="gg" ? "GIORNI STIMATI" : "VALORI STIMATI"),el("span","Nessuna stima","no-data"));
+  if (state.mapBand!=="all") labels.append(el("span","Fuori fascia","out-band"));
   const ramp=el("div",null,"legend-ramp");
   ramp.style.background="linear-gradient(90deg,"+m.stops.join(",")+")";
   const scale=el("div",null,"legend-scale");
@@ -333,6 +342,7 @@ function readZone() {
   const key=state.mapMetric, {cells,stats}=selectedReading();
   const box=$("zone-read");
   $("area-name").textContent=selectedArea().name;
+  readLocalStation();
   $("csv").disabled=!stats;
   if (!stats) {
     box.replaceChildren(el("p",cells ? "Nessuna stima per questa fascia e questo periodo." :
@@ -343,6 +353,26 @@ function readZone() {
     el("div","Da "+fmt(stats.min)+" a "+value(stats.max,key)+" · Celle con stima: "+pct(stats.coverage),"stat-meta"));
   const peak=peakText(key,stats.peak);
   if (peak) box.append(el("p","Picco locale: "+value(stats.max,key)+" · "+peak,"stat-meta"));
+}
+function readLocalStation() {
+  const box=$("local-station");
+  box.hidden=!state.comune || !state.data.stations.length;
+  if (box.hidden) return;
+  const {w,h}=state.data.grid, [lon,lat]=selectedArea().center;
+  const km=s=>111.195*Math.hypot((s.lon-lon)*Math.cos(lat*Math.PI/180),s.lat-lat);
+  const belongs=s=>{
+    const [x,y]=project(s.lon,s.lat).map(Math.floor);
+    return x>=0 && x<w && y>=0 && y<h && state.comuneArray[y*w+x]===state.comune;
+  };
+  const stations=state.data.stations.map(s=>({s,km:km(s),local:belongs(s)}))
+    .sort((a,b)=>b.local-a.local || a.km-b.km);
+  const [station]=stations, [lo,hi]=bandBounds[state.mapBand];
+  const {s}=station;
+  const context=station.local ? "Stazione nel comune" :
+    "Nessuna misura di stazione nel comune: la più vicina dista circa "+fmt(station.km)+" km dal punto di riferimento della mappa";
+  box.replaceChildren(el("strong","Misure di stazione · "+day(state.data.latest)),
+    el("span",s.name+" · "+fmt(s.z)+" m"+(s.z<lo || s.z>=hi ? " · Fuori dalla fascia della mappa" : "")),
+    el("span",stationDescription(s)),el("small",context+" · Dati anche provvisori"));
 }
 function chooseArea(zone,comune) {
   state.zone=zone;
@@ -383,6 +413,7 @@ function renderMap() {
   $("metric-copy").textContent=m.copy;
   $("metric-tip").textContent=m.tip;
   $("period").textContent=period(key);
+  $("map-context").textContent=m.title+" · "+period(key);
   drawSelection(); renderRaster(); legend(); readZone(); renderDates(); toggleStations(); hideTooltip(); syncUrl();
 }
 function compare() {
@@ -470,24 +501,45 @@ function showRoute() {
   if (which==="valli") compare();
   if (which==="metodo") syncUrl();
 }
+async function fetchGzip(url, cache) {
+  const response=await fetch(url,{cache});
+  if (!response.ok) throw new Error("Dati non disponibili");
+  return new Response(response.body.pipeThrough(new DecompressionStream("gzip")));
+}
+function loadHistory() {
+  if (!state.history) state.history=(async()=>{
+    const d=state.data;
+    const stride=d.grid.w*d.grid.h*(dayIndex(d.latest,d.daily.start)+1)*2;
+    const buffer=await (await fetchGzip("data/"+d.daily.file,"default")).arrayBuffer();
+    if (buffer.byteLength!==stride*d.daily.keys.length) throw new Error("Serie giornaliera di dimensione inattesa");
+    state.daily=Object.fromEntries(d.daily.keys.map((key,i)=>[key,new Int16Array(buffer,i*stride,stride/2)]));
+  })().catch(error=>{state.history=null; throw error;});
+  return state.history;
+}
+async function openSharedRoute() {
+  const current=location.hash;
+  const dates=restoreUrl();
+  if (dates && !state.daily) {
+    try {
+      await loadHistory();
+      if (location.hash!==current) return;
+      state.dates=dates;
+    } catch {
+      if (location.hash!==current) return;
+      $("date-status").textContent="Serie del link non disponibile. Mostro il periodo predefinito.";
+    }
+  }
+  showRoute();
+}
 async function populate(d) {
-  const size=d.grid.w*d.grid.h;
-  const byteLength=2*size*(dayIndex(d.latest,d.daily.start)+1);
-  state.daily=Object.fromEntries(await Promise.all(Object.entries(d.daily.fields).map(async ([k,encoded])=>{
-    const bytes=Uint8Array.from(atob(encoded),ch=>ch.charCodeAt(0));
-    const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
-    const buffer=await new Response(stream).arrayBuffer();
-    if (buffer.byteLength!==byteLength) throw new Error("Serie giornaliera di dimensione inattesa");
-    return [k,new Int16Array(buffer)];
-  })));
   state.data=d;
+  state.daily=state.history=null;
   state.layers.clear();
   state.elevation=decode(d.elevation);
   state.zoneArray=decode(d.zoneGrid);
   state.comuneArray=decode(d.comuneGrid);
   state.zoneById=Object.fromEntries(d.zones.map(z=>[z.id,z]));
   state.comuneById=Object.fromEntries(d.comuni.map(z=>[z.id,z]));
-  restoreUrl();
   for (const id of ["map-zone","pair-a","pair-b"]) {
     $(id).replaceChildren();
     if (id==="map-zone") {
@@ -516,21 +568,26 @@ async function populate(d) {
       fmt(mae)+(k==="rain" ? " mm" : " °C")+" · "+n+" stazioni"));
   }
   $("validation-date").textContent=day(d.latest);
-  drawBase(); showRoute();
+  drawBase(); await openSharedRoute();
 }
 async function load() {
   $("error").hidden=true;
+  $("map-error").hidden=true;
+  $("map-figure").hidden=false;
+  $("map-figure").inert=true;
   $("source-status").textContent="CARICAMENTO DATI";
   try {
-    const response=await fetch("data/atlas.json",{cache:"no-cache"});
-    if (!response.ok) throw new Error("Dati non disponibili");
-    const d=await response.json();
-    if (d.schema!==2) throw new Error("Formato dati non supportato");
+    const d=await (await fetchGzip("data/atlas.json.gz","no-cache")).json();
+    if (d.schema!==3 || !/^history-\d+-\d{8}T\d{4}\.bin\.gz$/.test(d.daily.file)) throw new Error("Formato dati non supportato");
     await populate(d);
+    $("map-figure").inert=false;
   } catch (err) {
     console.error(err);
     $("error").hidden=false;
+    $("map-error").hidden=false;
+    $("map-figure").hidden=true;
     $("source-status").textContent="DATI NON DISPONIBILI";
+    $("source-status").closest(".fresh").classList.add("stale");
   }
 }
 
@@ -604,7 +661,7 @@ async function exportPng() {
   ctx.fillStyle="#203a31"; ctx.font="17px sans-serif";
   ctx.fillText(value(low,key),32,897);
   ctx.textAlign="right"; ctx.fillText(value(high,key),432,897); ctx.textAlign="left";
-  ctx.fillText("Aree tratteggiate: stima non disponibile",468,876);
+  ctx.fillText("Tratteggio: nessuna stima"+(state.mapBand==="all" ? "" : " · Puntinato: fuori fascia"),468,876);
   ctx.fillText("Dati: Meteotrentino, CC BY 4.0 · Rilievo: TINITALY, INGV · Confini: Provincia autonoma di Trento · Stime, non allerte.",32,924);
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));
   if (!blob) throw new Error("Immagine non disponibile");
@@ -645,10 +702,17 @@ $("comune-form").addEventListener("submit",event=>{
   const [area]=comuneMatches();
   if (area) openComune(area);
 });
-$("date-controls").addEventListener("submit",event=>{
+$("date-controls").addEventListener("submit",async event=>{
   event.preventDefault();
   const a=$("date-start").value,b=$("date-end").value;
   if (a>b) { $("date-status").textContent="La data iniziale deve precedere o coincidere con quella finale."; return; }
+  const before=location.hash;
+  if (!state.daily) {
+    $("date-status").textContent="Caricamento delle serie giornaliere…";
+    try { await loadHistory(); }
+    catch { $("date-status").textContent="Serie giornaliere non disponibili. Riprova."; return; }
+    if (location.hash!==before || $("date-start").value!==a || $("date-end").value!==b) return;
+  }
   state.dates=[a,b]; applyDateView();
 });
 $("date-reset").addEventListener("click",()=>{state.dates=null;applyDateView();});
@@ -689,15 +753,18 @@ $("png").addEventListener("click",()=>{if (state.data) exportPng().catch(()=>{
 });});
 $("print").addEventListener("click",()=>{if (state.data) window.print();});
 $("retry").addEventListener("click",load);
+$("retry-map").addEventListener("click",load);
 document.querySelector(".skip").addEventListener("click",event=>{
   event.preventDefault();
   $("contenuto").focus();
   $("contenuto").scrollIntoView();
 });
 frame.addEventListener("pointermove",placeTooltip);
+frame.addEventListener("click",placeTooltip);
 frame.addEventListener("pointerleave",hideTooltip);
 window.addEventListener("hashchange",()=>{
-  if (state.data) restoreUrl(); showRoute(); window.scrollTo(0,0);
+  if (state.data) openSharedRoute(); else showRoute();
+  window.scrollTo(0,0);
 });
 showRoute();
 load();
