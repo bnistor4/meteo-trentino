@@ -142,7 +142,6 @@ tbody tr:hover { background:#f6f8f0 }
 footer { border-top:1px solid var(--border); background:#eff1e7; padding:19px 0 21px; color:var(--text-muted); font-size:12px }
 .footer-layout { display:grid; grid-template-columns:1fr 2fr; gap:16px }
 .footer-layout strong { color:var(--text); font-size:14px }
-.sr-only { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap }
 @media(max-width:970px) {
   .wrap { width:calc(100% - 48px) }
   .map-layout { grid-template-columns:minmax(0,1.7fr) minmax(235px,1fr) }
