@@ -525,6 +525,7 @@ function chooseArea(zone,comune,{recenter=true,focus=false}={}) {
   drawSelection(); readZone(); readPoint(); syncUrl();
   setAreaOpen(!!(zone||comune),focus);
 }
+let datesEdited=false;
 function renderDates() {
   const key=activeView()==="valli" ? state.compareMetric : state.mapMetric;
   const fixed=key==="gdd" || key==="spring";
@@ -533,8 +534,11 @@ function renderDates() {
   $("date-start").disabled=fixed || daily;
   $("date-end").disabled=fixed;
   $("date-start").closest("label").hidden=daily;
-  $("date-start").value=from>=state.data.daily.start && !fixed ? from : state.data.daily.start;
-  $("date-end").value=to<=state.data.latest && !fixed ? to : state.data.latest;
+  if (!datesEdited) {
+    const available=from>=state.data.daily.start && to<=state.data.latest && !fixed;
+    $("date-start").value=available ? from : state.data.daily.start;
+    $("date-end").value=available ? to : state.data.latest;
+  }
   $("date-controls").querySelector(".fields").hidden=fixed;
   $("date-controls").querySelector('[type="submit"]').hidden=fixed || activeView()!=="valli";
   $("date-presets").hidden=fixed || daily;
@@ -657,6 +661,7 @@ function renderPair() {
   $("pair-status").textContent="";
 }
 function showRoute() {
+  datesEdited=false;
   const which=activeView();
   $(which==="valli" ? "compare-date-slot" : "map-date-slot").append($("date-controls"));
   $("date-controls").hidden=!state.data;
@@ -854,6 +859,7 @@ function shareUrl(view,key) {
   return url.href;
 }
 function applyDateView() {
+  datesEdited=false;
   $("date-status").textContent="";
   renderMap();
   if (activeView()==="valli") compare();
@@ -882,7 +888,7 @@ for (const button of document.querySelectorAll("[data-metric]")) button.addEvent
   state.mapMetric=button.dataset.metric;
   renderMap();
 });
-createMetricControls($("compare-metrics"),"compareMetric",compare);
+createMetricControls($("compare-metrics"),"compareMetric",()=>{datesEdited=false;compare();});
 for (const [k,label] of Object.entries(bands)) {
   option($("map-band"),k,label); option($("compare-band"),k,label);
 }
@@ -927,8 +933,7 @@ async function submitDates(close=false) {
   if (!state.data) return;
   const key=activeView()==="valli" ? state.compareMetric : state.mapMetric;
   const b=$("date-end").value, a=dailyMetrics.includes(key) ? b : $("date-start").value;
-  if (["spring","gdd"].includes(key) || (key==="heat" && !state.dates && a===state.data.daily.start && b===state.data.latest) ||
-      (a===boundsFor(key)[0] && b===boundsFor(key)[1])) {
+  if (!datesEdited || ["spring","gdd"].includes(key) || (a===boundsFor(key)[0] && b===boundsFor(key)[1])) {
     if (close) closeSheet($("filters"));
     return;
   }
@@ -951,9 +956,11 @@ $("date-controls").addEventListener("submit",event=>{
   submitDates($("filters").open);
 });
 $("date-reset").addEventListener("click",()=>{state.dates=null;applyDateView();});
+for (const id of ["date-start","date-end"]) $(id).addEventListener("change",()=>{datesEdited=true;});
 for (const button of $("date-presets").children) button.addEventListener("click",()=>{
   $("date-end").value=state.data.latest;
   $("date-start").value=addDays(state.data.latest,1-Number(button.dataset.days));
+  datesEdited=true;
   $("date-status").textContent="";
 });
 $("stations-toggle").addEventListener("click",()=>{state.stations=!state.stations;renderMap();});
@@ -979,6 +986,11 @@ for (const anchor of document.querySelectorAll('a[data-view="valli"],a[data-view
 }
 function closeSheet(dialog,focus=true) {
   dialog.close();
+  if (dialog.id==="filters" || dialog.id==="valli") {
+    datesEdited=false;
+    if (state.data) renderDates();
+    $("date-status").textContent="";
+  }
   if (dialog.id==="valli" || dialog.id==="metodo") {
     history.replaceState(null,"",mapHash("mappa"));
     showRoute();
