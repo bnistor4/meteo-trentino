@@ -534,9 +534,9 @@ function renderDates() {
   $("date-end").disabled=fixed;
   $("date-start").closest("label").hidden=daily;
   if (!datesEdited) {
-    const available=from>=state.data.daily.start && to<=state.data.latest && !fixed;
-    $("date-start").value=available ? from : state.data.daily.start;
-    $("date-end").value=available ? to : state.data.latest;
+    const available=to>=state.data.daily.start && from<=state.data.latest && !fixed;
+    $("date-start").value=available && from>=state.data.daily.start ? from : state.data.daily.start;
+    $("date-end").value=available && to<=state.data.latest ? to : state.data.latest;
   }
   $("date-controls").querySelector(".fields").hidden=fixed;
   $("date-controls").querySelector('[type="submit"]').hidden=fixed || activeView()!=="valli";
