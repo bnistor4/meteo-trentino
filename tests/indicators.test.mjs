@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {aggregate, areaStats, dayIndex, addDays} from "../web/indicators.mjs";
+import {aggregate, areaStats, dayIndex, addDays, shownMeanDifference} from "../web/indicators.mjs";
+
+test("comparison difference agrees with the displayed one-decimal means",()=>{
+  assert.equal(shownMeanDifference(3.049,3.051),-.1);
+  assert.equal(shownMeanDifference(3.051,3.149),0);
+  assert.equal(shownMeanDifference(-3.05,-3),-.1);
+});
 
 test("rain windows overlap, honor dates and retain the earliest tie",()=>{
   const r=Int16Array.from([1,9,9,1,9,9]);

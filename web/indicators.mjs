@@ -3,6 +3,12 @@ const msPerDay = 86400000;
 export const dayIndex = (iso, origin) => (Date.parse(iso) - Date.parse(origin)) / msPerDay;
 export const addDays = (iso, days) => new Date(Date.parse(iso) + days * msPerDay).toISOString().slice(0, 10);
 export const peakDays = {storm:1, storm48:2, storm72:3};
+const comparisonDigits = {maximumFractionDigits:1};
+const comparisonScale = new Intl.NumberFormat("en",{...comparisonDigits,useGrouping:false});
+export const formatValue = new Intl.NumberFormat("it-IT",comparisonDigits);
+export function shownMeanDifference(a,b) {
+  return Math.round(10*(Number(comparisonScale.format(a))-Number(comparisonScale.format(b))))/10;
+}
 
 export function aggregate(rows, size, first, last, metric, scale) {
   const values = new Float32Array(size).fill(NaN);

@@ -1,4 +1,4 @@
-import {addDays, dayIndex, peakDays, aggregate, areaStats} from "./indicators.mjs";
+import {addDays, dayIndex, peakDays, aggregate, areaStats, formatValue, shownMeanDifference} from "./indicators.mjs";
 
 const $ = id => document.getElementById(id);
 $("map-date-slot").append($("date-template").content.cloneNode(true));
@@ -61,8 +61,7 @@ const province = {id:0,name:"Provincia di Trento"};
 const state = {mapMetric:"min",compareMetric:"min",mapBand:"all",compareBand:"all",
   zone:0,comune:0,zoom:1,center:null,cell:null,station:null,dates:null,pairA:11,pairB:4,data:null,layers:new Map()};
 const frame = $("atlas-map");
-const it = new Intl.NumberFormat("it-IT",{maximumFractionDigits:1});
-const fmt = v => it.format(v);
+const fmt = v => formatValue.format(v);
 const pct = v => Math.round(v * 100) + "%";
 const value = (number, key) => fmt(number) + " " + (metrics[key].unit==="gg" ? (fmt(number)==="1" ? "giorno" : "giorni") : metrics[key].unit);
 const day = iso => new Intl.DateTimeFormat("it-IT",{day:"numeric",month:"short",year:"numeric",timeZone:"UTC"}).format(new Date(iso));
@@ -651,11 +650,11 @@ function renderPair() {
       el("small","Quota media "+fmt(s.zMean)+" m · "+fmt(s.zMin)+"–"+fmt(s.zMax)+" m"));
     return card;
   })));
-  const [[a,left],[b,right]]=rows, diff=left && right ? left.mean-right.mean : 0;
+  const [[a,left],[b,right]]=rows, diff=left && right ? shownMeanDifference(left.mean,right.mean) : 0;
   $("pair-elevation").textContent=same ? "Scegli due valli diverse." :
     periodWarning(key) || (!left || !right ? (band!=="all" ? "Nessuna stima per almeno una valle in questa fascia. Prova tutte le quote." :
       "Nessuna stima per almeno una valle nel periodo selezionato.") :
-    fmt(Math.abs(diff))==="0" ? "Medie uguali alla precisione mostrata." :
+    diff===0 ? "Medie uguali alla precisione mostrata." :
     "Scarto tra le medie: "+value(Math.abs(diff),key)+" in più per "+(diff>0 ? a.name : b.name)+".");
   $("pair-copy").disabled=same; $("pair-csv").disabled=same;
   $("pair-status").textContent="";
