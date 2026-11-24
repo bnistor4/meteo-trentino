@@ -30,3 +30,10 @@ test("solar dates span the change to winter time without an extra hour",()=>{
   assert.equal(dayIndex("2026-10-26","2026-10-24"),2);
   assert.equal(addDays("2026-10-24",2),"2026-10-26");
 });
+
+test("province-wide statistics include all valleys but exclude cells outside Trentino",()=>{
+  const {cells,stats}=areaStats([100,4,8,NaN],[0,1,2,2],[500,500,550,600],null,[0,800]);
+  assert.equal(cells,3);
+  assert.equal(stats.mean,6);
+  assert.equal(stats.coverage,2/3);
+});
