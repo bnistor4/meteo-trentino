@@ -198,10 +198,10 @@ function stationDescription(s) {
   return [["min","Minima","mean"],["mean","Media","mean"],["max","Massima","mean"],["rain","Pioggia","rain"]]
     .filter(([key])=>s[key]!=null).map(([key,label,metric])=>label+" "+value(s[key],metric)).join(" · ");
 }
-function placeTooltip(event) {
+function placeTooltip(event, cell) {
   if (!state.data || event.target.classList.contains("station")) return;
   const {w,h}=state.data.grid;
-  const [x,y]=positionFromPointer(event);
+  const [x,y]=cell ?? positionFromPointer(event);
   if (x<0 || y<0 || x>=w || y>=h) return hideTooltip();
   const i=y*w+x, id=state.zoneArray[i], z=state.elevation[i];
   const [lo,hi]=bandBounds[state.mapBand];
@@ -228,14 +228,6 @@ function drawBase() {
   state.bounds=[minX-7,minY-7,maxX-minX+15,maxY-minY+15];
   for (const z of d.zones) {
     const path=svg("path",{d:zonePath(z.geometry),class:"zone-shape","data-zone":z.id,"fill-rule":"evenodd"});
-    path.addEventListener("click",event => {
-      if (state.comune) {
-        const [x,y]=positionFromPointer(event);
-        if (x<0 || y<0 || x>=w || y>=h) return;
-        const id=state.comuneArray[y*w+x];
-        if (id>0) chooseArea(z.id,id);
-      } else chooseArea(z.id,0);
-    });
     state.shapes.append(path);
   }
   state.selection=svg("path",{class:"zone-shape selected","fill-rule":"evenodd"});
@@ -756,7 +748,20 @@ document.querySelector(".skip").addEventListener("click",event=>{
   $("contenuto").scrollIntoView();
 });
 frame.addEventListener("pointermove",placeTooltip);
-frame.addEventListener("click",placeTooltip);
+frame.addEventListener("click",event=>{
+  if (!state.data || event.target.classList.contains("station")) return;
+  const cell=positionFromPointer(event), [x,y]=cell;
+  const path=event.target.closest("path[data-zone]");
+  if (path) {
+    const {w,h}=state.data.grid, zone=Number(path.dataset.zone);
+    if (!state.comune) chooseArea(zone,0);
+    else if (x>=0 && y>=0 && x<w && y<h) {
+      const id=state.comuneArray[y*w+x];
+      if (id>0) chooseArea(zone,id);
+    }
+  }
+  placeTooltip(event,cell);
+});
 frame.addEventListener("pointerleave",hideTooltip);
 window.addEventListener("hashchange",()=>{
   if (state.data) openSharedRoute(); else showRoute();
