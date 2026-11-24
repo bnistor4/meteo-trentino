@@ -678,6 +678,11 @@ $("png").addEventListener("click",()=>{if (state.data) exportPng().catch(()=>{
 });});
 $("print").addEventListener("click",()=>{if (state.data) window.print();});
 $("retry").addEventListener("click",load);
+document.querySelector(".skip").addEventListener("click",event=>{
+  event.preventDefault();
+  $("contenuto").focus();
+  $("contenuto").scrollIntoView();
+});
 frame.addEventListener("pointermove",placeTooltip);
 frame.addEventListener("pointerleave",hideTooltip);
 window.addEventListener("hashchange",()=>{
