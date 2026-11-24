@@ -19,13 +19,14 @@
     </a>
     <form id="comune-form" class="search" role="search">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
-      <input type="search" id="comune-search" aria-label="Cerca un comune" placeholder="Cerca un comune" autocomplete="off" aria-controls="comune-results">
+      <input type="search" id="comune-search" aria-label="Cerca un comune" placeholder="Cerca un comune, es. Trento" autocomplete="off" aria-controls="comune-results">
       <ul id="comune-results" aria-label="Comuni trovati"></ul>
+      <span id="search-status" class="sr-only" role="status"></span>
     </form>
     <nav aria-label="Strumenti">
       <a class="control" href="#valli" id="link-valli" data-view="valli"><span>Confronta<span class="wide-label"> valli</span></span></a>
-      <a class="control" href="#metodo" id="link-metodo" data-view="metodo" aria-label="Metodo e fonti">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg><span>Metodo<span class="wide-label"> e fonti</span></span>
+      <a class="control" href="#metodo" id="link-metodo" data-view="metodo" aria-label="Guida e fonti">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg><span>Guida<span class="wide-label"> e fonti</span></span>
       </a>
     </nav>
   </header>
@@ -41,7 +42,7 @@
         <button data-metric="max" type="button" aria-pressed="false">Massima</button>
         <button data-metric="rainDay" type="button" aria-pressed="false">Pioggia</button>
       </div>
-      <button class="control" type="button" data-open="metric-picker" aria-haspopup="dialog">Indicatori <span aria-hidden="true">⌄</span></button>
+      <button class="control" type="button" data-open="metric-picker" aria-haspopup="dialog">Altre mappe <span aria-hidden="true">⌄</span></button>
       <button class="control primary" type="button" data-open="filters" aria-haspopup="dialog">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18M8 4v4m8 2v4m-6 2v4"/></svg>
         <span>Filtri</span><span id="filter-count" class="badge" hidden></span>
@@ -64,11 +65,9 @@
         <button type="button" id="zoom-out" aria-label="Riduci">−</button>
         <button type="button" id="zoom-reset" aria-label="Mostra tutto il Trentino" title="Mostra tutto il Trentino"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5"/><circle cx="12" cy="12" r="2"/></svg></button>
       </div>
-      <button class="control floating" type="button" id="stations-toggle" aria-pressed="false" aria-label="Mostra stazioni" title="Mostra stazioni">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 8 9-5 9 5-9 5-9-5Zm0 4 9 5 9-5m-18 4 9 5 9-5"/></svg>
-      </button>
+      <button class="control floating" type="button" id="stations-toggle" aria-pressed="false" title="Mostra stazioni">Stazioni</button>
       <button class="control floating locate" type="button" id="show-area" disabled aria-expanded="false" aria-controls="area-panel">
-        Riepilogo
+        Dati locali
       </button>
     </div>
 
@@ -80,7 +79,7 @@
         </button>
       </div>
       <div id="legend" class="legend"></div>
-      <p class="history-note">Stime storiche, non previsioni.</p>
+      <p class="history-note">Stime del passato, non previsioni.</p>
       <a class="forecast-link" href="https://www.meteotrentino.it/previsioni/">Previsioni Meteotrentino</a>
     </section>
     <div class="map-credit">
@@ -99,7 +98,7 @@
           <h3 id="daily-heading"></h3>
           <button type="button" id="save-comune" class="linklike" aria-pressed="false">Salva per le prossime visite</button>
         </div>
-        <p class="stat-meta">Valori medi stimati nel comune.</p>
+        <p class="stat-meta">Valori medi stimati nel comune, a tutte le quote.</p>
         <div id="daily-values" class="daily-values"></div>
         <details id="daily-trend">
           <summary>Ultimi 7 giorni</summary>
@@ -117,7 +116,7 @@
 
   <dialog id="metric-picker" class="sheet dock" aria-labelledby="metric-picker-title">
     <div class="sheet-heading">
-      <h2 id="metric-picker-title">Indicatori</h2><button type="button" data-close class="icon-button" aria-label="Chiudi indicatori">×</button>
+      <h2 id="metric-picker-title">Scegli una mappa</h2><button type="button" data-close class="icon-button" aria-label="Chiudi scelta mappa">×</button>
     </div>
     <div class="sheet-content" id="metric-options"></div>
   </dialog>
@@ -129,7 +128,7 @@
     <div class="sheet-content">
       <div class="fields">
         <label class="select-label">Quota <select id="map-band"></select></label>
-        <label class="select-label">Comunità di valle <select id="map-zone"></select></label>
+        <label class="select-label">Valle <select id="map-zone"></select></label>
       </div>
       <div id="map-date-slot"></div>
       <button type="submit" form="date-controls" class="action primary" id="show-map">Fine</button>
@@ -168,7 +167,7 @@
     </div>
     <div class="sheet-content">
       <div class="fields">
-        <label class="select-label">Indicatore <select id="compare-metrics"></select></label>
+        <label class="select-label">Cosa confrontare <select id="compare-metrics"></select></label>
         <label class="select-label">Quota <select id="compare-band"></select></label>
         <label class="select-label">Prima valle <select id="pair-a"></select></label>
         <label class="select-label">Seconda valle <select id="pair-b"></select></label>
@@ -201,11 +200,20 @@
 
   <dialog id="metodo" class="sheet wide" aria-labelledby="method-title">
     <div class="sheet-heading">
-      <h2 id="method-title">Metodo e fonti</h2><button type="button" data-close class="icon-button" aria-label="Chiudi metodo e fonti">×</button>
+      <h2 id="method-title">Guida e fonti</h2><button type="button" data-close class="icon-button" aria-label="Chiudi guida e fonti">×</button>
     </div>
     <div class="sheet-content prose">
       <div class="fresh"><span id="source-status">Dati in caricamento</span> <strong id="latest"></strong><span id="network"></span></div>
-      <p>La mappa stima le condizioni passate tra le stazioni su celle di circa 750 m. Non è una previsione né un sistema di allerta.</p>
+      <section>
+        <h3>Come si usa</h3>
+        <ol class="guide-steps">
+          <li>Scegli <strong>Minima</strong>, <strong>Massima</strong> o <strong>Pioggia</strong> per l’ultimo giorno con dati.</li>
+          <li>Cerca il tuo comune per vedere gli ultimi sette giorni. Salvalo per ritrovarlo su questo browser.</li>
+          <li>Tocca o fai clic sulla mappa per leggere la stima in un punto. Attiva <strong>Stazioni</strong> per vedere le misure raccolte sul posto.</li>
+        </ol>
+        <p>Per cambiare data o quota apri <strong>Filtri</strong>. Per gelo, caldo e piogge su più giorni apri <strong>Altre mappe</strong>.</p>
+      </section>
+      <p>L’Atlante non fa previsioni né dirama allerte. Per sapere che tempo farà, consulta le <a href="https://www.meteotrentino.it/previsioni/">previsioni di Meteotrentino</a>.</p>
       <section>
         <h3>Fonti</h3>
         <ul>

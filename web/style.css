@@ -101,9 +101,11 @@ svg { flex:none }
 .sheet-content h3 { font-size:15px; letter-spacing:-.02em }
 .prose p,.prose li { color:var(--muted) }
 .prose ul { margin:5px 0 0; padding-left:21px }
+.guide-steps { margin:6px 0 9px; padding-left:21px }
+.guide-steps li + li { margin-top:4px }
 .fresh { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; color:var(--muted); font-size:12px }
 #network { width:100% }
-.fresh.stale #source-status { color:#8b441c; font-weight:650 }
+.fresh.stale #source-status,.key-header #period.stale { color:#8b441c; font-weight:650 }
 .fields { display:grid; gap:10px; grid-template-columns:repeat(2,minmax(0,1fr)) }
 .select-label { display:grid; gap:4px; min-width:0; color:var(--muted); font-size:12px; font-weight:650 }
 .fields select,.fields input,#share-url { min-width:0; width:100%; min-height:44px; padding:7px 9px; border:1px solid #bac9d4; border-radius:9px; background:white; color:var(--text); font-size:14px; font-weight:550 }
@@ -191,6 +193,8 @@ body { padding-top:env(safe-area-inset-top) }
 .stat-secondary { font-weight:650 }
 .local-history { margin-top:5px }
 #daily-summary { border-top:1px solid var(--line); margin-top:12px; padding-top:8px }
+#point-read[hidden] + #daily-summary { margin-top:0; border-top:0; padding-top:3px }
+#daily-summary:not([hidden]) + #zone-read { margin-top:8px; border-top:1px solid var(--line); padding-top:8px }
 .daily-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0 8px }
 .daily-heading h3 { font-size:15px }
 #save-comune { min-height:44px; font-size:12px; padding:0 }
@@ -221,12 +225,8 @@ details summary::after { content:""; width:8px; height:8px; margin-right:5px; bo
 details[open] > summary::after { transform:rotate(225deg) }
 .table-scroll { max-width:100% }
 @media(max-width:640px) {
-  .top { grid-template-columns:auto minmax(0,1fr) auto; gap:6px; padding:6px var(--inset) }
-  .brand span { display:none }
+  .top { padding-block:2px 8px }
   .top nav .control { padding-inline:5px }
-  .search { grid-row:auto; grid-column:auto }
-  .search input { padding-left:25px; padding-right:5px }
-  .search svg { left:7px; width:15px }
   .toolbar .control { padding-inline:9px }
   .daily-switch button { padding-inline:10px }
   .share-button { width:44px }

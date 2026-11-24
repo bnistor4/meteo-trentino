@@ -1,8 +1,24 @@
 # Atlante Meteo Trentino
 
-Atlante indipendente in italiano. La mappa apre sull’ultimo giorno osservato, con accesso a minime, massime e pioggia. Cerca un comune per vedere le medie stimate degli ultimi sette giorni e salvarlo nel browser. I pannelli raccolgono filtri, confronti tra valli, fonti ed esportazioni. L’Atlante non fornisce previsioni o allerte e non misura il clima o la resa agricola.
+**[Apri l’Atlante Meteo Trentino](https://bnistor4.github.io/meteo-trentino/)** · Gratuito, senza account.
 
-## Avvio
+Un atlante indipendente per vedere dove ha fatto più freddo, caldo o dove è piovuto di più in Trentino. La mappa usa i dati delle stazioni di Meteotrentino per stimare i valori anche nei luoghi senza una stazione.
+
+## Come si usa
+
+1. Scegli **Minima**, **Massima** o **Pioggia** per l’ultimo giorno con dati. La data è indicata sulla mappa.
+2. Cerca un comune per vedere i suoi valori stimati e gli **Ultimi 7 giorni**. Salvalo per ritrovarlo quando riapri il sito dallo stesso browser.
+3. Apri **Altre mappe** per vedere gelo, caldo e pioggia nel tempo. Usa **Filtri** per cambiare date o quota, **Confronta valli** per vedere due territori affiancati e **Condividi** per copiare il link o scaricare i dati.
+
+Un punto sulla mappa mostra una **stima** per quel luogo. I punti contrassegnati come **Stazioni** mostrano invece le misure raccolte sul posto. L’Atlante descrive il passato, non il tempo di oggi o di domani: per quello usa le [previsioni ufficiali di Meteotrentino](https://www.meteotrentino.it/previsioni/).
+
+## Aggiornamento automatico
+
+Il [workflow GitHub Actions](https://github.com/bnistor4/meteo-trentino/actions/workflows/atlante.yml) scarica i dati, ricalcola le mappe e pubblica su GitHub Pages ogni giorno alle 06:37 UTC, oltre che dopo le modifiche a `main`. Se un aggiornamento fallisce, il sito mantiene l’ultima versione pubblicata. In **Guida e fonti** trovi la data delle misure e, sotto **Ultima elaborazione**, quella del calcolo delle mappe.
+
+GitHub può ritardare le esecuzioni e disattiva quelle pianificate nei repository pubblici dopo 60 giorni di inattività. Se ciò accade, un amministratore può riattivarle dalla [pagina del workflow](https://github.com/bnistor4/meteo-trentino/actions/workflows/atlante.yml). Per ospitare una propria copia, attiva **Settings → Pages → Source → GitHub Actions**.
+
+## Avvio locale
 
 Con Python 3.12:
 
@@ -16,13 +32,6 @@ OPENBLAS_NUM_THREADS=1 .venv/bin/python refresh.py
 `web/` è il sito statico; la stessa cartella si può pubblicare con un qualsiasi servizio statico. Le mappe predefinite usano `data/atlas.json.gz`; le serie giornaliere vengono scaricate solo quando si seleziona un periodo personalizzato. Per Devin Apps, impostare `ATLAS_SNAPSHOT` al percorso assoluto di `atlas.json.gz` e usare lo stesso percorso per `refresh.py --output`, con `--cache` fuori dal checkout e `--trigger cron`. Le serie di ciascuna versione sono scritte prima di pubblicare il nuovo atlante.
 
 Per provare modifiche senza riscaricare i dati, usa lo stesso percorso assoluto in `ATLAS_SNAPSHOT` e una porta libera, per esempio `8766`. Il file delle serie giornaliere deve restare accanto allo snapshot.
-
-## Pubblicazione e aggiornamento
-
-- GitHub Pages: attivare **Settings → Pages → Source → GitHub Actions**. Il workflow pubblica su push al ramo principale e ogni giorno alle 06:37 UTC. Un errore nel download o nei controlli non sostituisce il sito già pubblicato.
-- Gli orari GitHub possono slittare. GitHub disattiva le pianificazioni dei repository pubblici dopo 60 giorni di inattività; controllare che il workflow sia ancora attivo in caso di sito non aggiornato.
-- Devin App: la pianificazione locale del deployment è alle 06:20 UTC. Il server e la pianificazione locale dipendono dalla disponibilità della sessione che li ospita; l’App Devin è visibile solo agli utenti autenticati autorizzati.
-- L’ultimo giorno osservato, la versione dell’archivio e la data di pubblicazione sono verificabili in **Metodo e fonti**. Il refresh registra una riga JSON con versione, data, conteggi e trigger.
 
 ## Metodo e fonti
 
