@@ -14,7 +14,7 @@ Un punto sulla mappa mostra una **stima** per quel luogo. I punti contrassegnati
 
 ## Aggiornamento automatico
 
-Il [workflow GitHub Actions](https://github.com/bnistor4/meteo-trentino/actions/workflows/atlante.yml) scarica i dati, ricalcola le mappe e pubblica su GitHub Pages ogni giorno alle 06:37 UTC, oltre che dopo le modifiche a `main`. Se un aggiornamento fallisce, il sito mantiene l’ultima versione pubblicata. In **Guida e fonti** trovi la data delle misure e, sotto **Ultima elaborazione**, quella del calcolo delle mappe.
+Il [workflow GitHub Actions](https://github.com/bnistor4/meteo-trentino/actions/workflows/atlante.yml) aggiorna le mappe alle 06:37 UTC e riprova alle 07:53 UTC se un’esecuzione pianificata non ha ancora pubblicato i dati di ieri. Le modifiche a `main` pubblicano anche il sito. Se Meteotrentino non ha ancora fornito i dati del giorno atteso, il sito mantiene l’ultima versione pubblicata. In **Guida e fonti** trovi la data delle misure e, sotto **Ultima elaborazione**, quella del calcolo delle mappe.
 
 GitHub può ritardare le esecuzioni e disattiva quelle pianificate nei repository pubblici dopo 60 giorni di inattività. Se ciò accade, un amministratore può riattivarle dalla [pagina del workflow](https://github.com/bnistor4/meteo-trentino/actions/workflows/atlante.yml). Per ospitare una propria copia, attiva **Settings → Pages → Source → GitHub Actions**.
 

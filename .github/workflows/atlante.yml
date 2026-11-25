@@ -7,6 +7,7 @@ on:
     branches: [main]
   schedule:
     - cron: '37 6 * * *'
+    - cron: '53 7 * * *'
   workflow_dispatch:
 
 permissions:
@@ -37,28 +38,57 @@ jobs:
     needs: verifica
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      gia_aggiornato: ${{ steps.freschezza.outputs.gia_aggiornato }}
     permissions:
       contents: read
     steps:
+      - name: Controlla la data pubblicata
+        id: freschezza
+        if: github.event_name == 'schedule'
+        run: |
+          ieri=$(TZ=Etc/GMT-1 date -d yesterday +%F)
+          echo "ieri=$ieri" >> "$GITHUB_OUTPUT"
+          owner=${GITHUB_REPOSITORY_OWNER,,}
+          url="https://$owner.github.io/${GITHUB_REPOSITORY#*/}/data/atlas.json.gz"
+          if curl -fsSL --max-time 20 "$url?run=$GITHUB_RUN_ID" | gzip -dc |
+              jq -e --arg ieri "$ieri" '.trigger == "programma" and (.latest | type == "string" and . >= $ieri)' > /dev/null; then
+            echo "Dati del $ieri già pubblicati da un'esecuzione pianificata."
+            echo "gia_aggiornato=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.freschezza.outputs.gia_aggiornato != 'true'
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
+        if: steps.freschezza.outputs.gia_aggiornato != 'true'
         with:
           python-version: '3.12'
           cache: pip
       - run: python -m pip install -r requirements.txt
+        if: steps.freschezza.outputs.gia_aggiornato != 'true'
       - name: Elabora i dati Meteotrentino
+        if: steps.freschezza.outputs.gia_aggiornato != 'true'
         env:
           OPENBLAS_NUM_THREADS: '1'
           TRIGGER: ${{ github.event_name == 'schedule' && 'programma' || 'deploy' }}
         run: python refresh.py --trigger "$TRIGGER"
+      - name: Verifica che i dati pianificati arrivino almeno a ieri
+        if: github.event_name == 'schedule' && steps.freschezza.outputs.gia_aggiornato != 'true'
+        env:
+          IERI: ${{ steps.freschezza.outputs.ieri }}
+        run: |
+          set -o pipefail
+          gzip -dc web/data/atlas.json.gz |
+            jq -e --arg ieri "$IERI" '.latest | type == "string" and . >= $ieri'
       - uses: actions/upload-pages-artifact@v3
+        if: steps.freschezza.outputs.gia_aggiornato != 'true'
         with:
           path: web
 
   pubblica:
     needs: prepara
+    if: needs.prepara.outputs.gia_aggiornato != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 22
     permissions:
