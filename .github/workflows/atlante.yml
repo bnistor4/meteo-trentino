@@ -8,6 +8,8 @@ on:
   schedule:
     - cron: '37 6 * * *'
     - cron: '53 7 * * *'
+  repository_dispatch:
+    types: [atlante_refresh_scheduled]
   workflow_dispatch:
 
 permissions:
@@ -42,11 +44,14 @@ jobs:
       gia_aggiornato: ${{ steps.freschezza.outputs.gia_aggiornato }}
     permissions:
       contents: read
+    env:
+      AGGIORNAMENTO_PIANIFICATO: ${{ github.event_name == 'schedule' || github.event_name == 'repository_dispatch' }}
     steps:
       - name: Controlla la data pubblicata
         id: freschezza
-        if: github.event_name == 'schedule'
+        if: env.AGGIORNAMENTO_PIANIFICATO == 'true'
         run: |
+          set -o pipefail
           ieri=$(TZ=Etc/GMT-1 date -d yesterday +%F)
           echo "ieri=$ieri" >> "$GITHUB_OUTPUT"
           owner=${GITHUB_REPOSITORY_OWNER,,}
@@ -71,16 +76,18 @@ jobs:
         if: steps.freschezza.outputs.gia_aggiornato != 'true'
         env:
           OPENBLAS_NUM_THREADS: '1'
-          TRIGGER: ${{ github.event_name == 'schedule' && 'programma' || 'deploy' }}
+          TRIGGER: ${{ env.AGGIORNAMENTO_PIANIFICATO == 'true' && 'programma' || 'deploy' }}
         run: python refresh.py --trigger "$TRIGGER"
       - name: Verifica che i dati pianificati arrivino almeno a ieri
-        if: github.event_name == 'schedule' && steps.freschezza.outputs.gia_aggiornato != 'true'
+        if: env.AGGIORNAMENTO_PIANIFICATO == 'true' && steps.freschezza.outputs.gia_aggiornato != 'true'
         env:
           IERI: ${{ steps.freschezza.outputs.ieri }}
         run: |
           set -o pipefail
           gzip -dc web/data/atlas.json.gz |
-            jq -e --arg ieri "$IERI" '.latest | type == "string" and . >= $ieri'
+            jq -e --arg ieri "$IERI" '
+              select(.trigger == "programma" and (.latest | type == "string" and . >= $ieri))
+              | {latest, sourceVersion, trigger, updatedAt, history: .daily.file}'
       - uses: actions/upload-pages-artifact@v3
         if: steps.freschezza.outputs.gia_aggiornato != 'true'
         with:
